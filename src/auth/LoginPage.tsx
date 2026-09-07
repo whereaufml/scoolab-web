@@ -15,13 +15,13 @@ export interface UsersDb {
 
 export interface UserSession {
   name: string;
-  role: 'siswa' | 'guru';
+  role: 'siswa' | 'guru' | 'admin' ;
   id: string;
   classId?: string;
 }
 
 interface LoginFormProps {
-  role: 'siswa' | 'guru';
+  role: 'siswa' | 'guru'  | 'admin';
   onLogin: (userData: UserSession) => void;
   usersDb: UsersDb;
 }
