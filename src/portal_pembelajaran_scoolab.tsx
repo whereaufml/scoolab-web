@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { 
-  AlertCircle, CheckCircle, LogOut, BarChart2, Calculator, X, ShieldAlert, Smartphone, ArrowLeft, FolderOpen, Trash2, Settings, Lock, AlertTriangle
+  AlertCircle, CheckCircle, LogOut, BarChart2, Calculator, X, ShieldAlert, Smartphone, ArrowLeft, FolderOpen, Trash2, Settings, Lock, AlertTriangle, Users
 } from 'lucide-react';
 
 import { spldvTemplateUjian } from './materi/ujian/spldvUjianData';
@@ -9,7 +9,6 @@ import TeacherServerLobby from './dashboard/TeacherServerLobby';
 import LoginPage from './auth/LoginPage';
 import TeacherDashboard from './dashboard/TeacherDashboard';
 import { spldvTemplateLatihan } from './materi/latihan/spldvLatihanData';
-
 
 const INITIAL_LKPD = [
   {
@@ -34,7 +33,11 @@ const INITIAL_MATERI = [
   { id: 'mat_1', classId: 'cls_8a', title: 'Bab 1: Konsep Dasar SPLDV', desc: 'Mengenal variabel, konstanta, dan penyelesaian dengan metode grafik.', isDeleted: false, deletedAt: null }
 ];
 
+// PENAMBAHAN DATABASE: Memasukkan role admin ke dalam struktur
 const INITIAL_USERS_DB = {
+  admin: {
+    "admin_utama": { id: "a1", pass: "admin123" }
+  },
   siswa: { 
     "Siswa 1": { id: "s1", pass: "siswa123", classId: "cls_8a" },
     "Siswa 2": { id: "s2", pass: "siswa123", classId: "cls_8a" },
@@ -47,6 +50,7 @@ const INITIAL_USERS_DB = {
   }
 };
 
+// ... (Komponen SingleDeviceConflictModal, ChangePasswordModal, ReusableDeleteConfirmModal, DashboardCard, DashboardLayout tetap sama persis seperti kode sebelumnya) ...
 const SingleDeviceConflictModal = memo(({ isOpen, username, onKeepSession, onLogout }: any) => {
   if (!isOpen) return null;
   return (
@@ -173,6 +177,19 @@ export const DashboardLayout = memo(({ user, activeServer, onChangeServer, onLog
   );
 });
 
+// KOMPONEN DRAFT ADMIN: Tampilan sementara untuk Admin
+const AdminDashboard = memo(({ user, onLogout, onChangePassword }: any) => {
+  return (
+    <DashboardLayout user={user} onLogout={onLogout} onChangePassword={onChangePassword}>
+      <div className="bg-indigo-50 border border-indigo-100 rounded-3xl p-8 text-center max-w-2xl mx-auto mt-10">
+        <Users size={48} className="mx-auto text-indigo-600 mb-4" />
+        <h2 className="text-2xl font-bold text-slate-800 mb-2">Selamat Datang, Administrator</h2>
+        <p className="text-slate-600">Halaman ini nantinya akan berisi alat untuk mengatur data Siswa dan Guru. (Akan dikembangkan pada tahap selanjutnya).</p>
+      </div>
+    </DashboardLayout>
+  );
+});
+
 const StudentDashboard = memo(({ user, activeServer, onLogout, materiData, lkpdDb, setLkpdDb, latihanDb, setLatihanDb, ujianDb, setUjianDb, onChangePassword }: any) => {
   const [currentView, setCurrentView] = useState('main'); 
   const [activeMateriId, setActiveMateriId] = useState<any>(null);
@@ -243,7 +260,6 @@ const App = () => {
   const [classes, setClasses] = useState(() => { const s = localStorage.getItem('scool_c'); return s ? JSON.parse(s) : INITIAL_CLASSES; });
   const [materiList, setMateriList] = useState(() => { const s = localStorage.getItem('scool_m'); return s ? JSON.parse(s) : INITIAL_MATERI; });
   const [latihanList, setLatihanList] = useState(() => {
-    // UBAH v2 MENJADI v3 DI BAWAH INI
     const s = localStorage.getItem('scool_lat_v3');
     return s ? JSON.parse(s) : spldvTemplateLatihan;
   });
@@ -314,8 +330,19 @@ const App = () => {
     return null; 
   }, [user, usersDb]);
 
+  // LOGIKA PELINDUNG: Jika belum login, tampilkan draft LoginPage yang baru
   if (!user) return <LoginPage onLogin={handleLogin} usersDb={usersDb} />;
   
+  // PENAMBAHAN RUTING: Mengarahkan Admin ke halamannya sendiri
+  if (user.role === 'admin') {
+    return (
+      <>
+        <AdminDashboard user={user} onLogout={() => setShowLogoutModal(true)} onChangePassword={handleChangePassword} />
+        <LogoutConfirmModal isOpen={showLogoutModal} onConfirm={handleLogout} onCancel={() => setShowLogoutModal(false)} />
+      </>
+    );
+  }
+
   if (user.role === 'guru' && !selectedServerId) {
     return (
       <>

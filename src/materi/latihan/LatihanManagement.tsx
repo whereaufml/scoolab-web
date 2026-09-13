@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Plus, PenTool, Trash2, X, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Plus, PenTool, Trash2, X, RotateCcw, FileBadge } from 'lucide-react';
 import { generateId } from '../lkpd/constants';
 import LatihanBuilder from './LatihanBuilder';
 import LatihanViewer from './LatihanViewer';
@@ -72,7 +72,7 @@ const LatihanManagement: React.FC<LatihanManagementProps> = ({ role, materiId, l
 
   // --- Fungsi Hapus & Pulihkan ---
   const requestDelete = (e: React.MouseEvent, lat: any) => {
-    e.stopPropagation(); // Mencegah klik menembus ke card (agar tidak membuka editor)
+    e.stopPropagation(); 
     setItemToDelete(lat);
     setShowDeleteModal(true);
   };
@@ -154,14 +154,28 @@ const LatihanManagement: React.FC<LatihanManagementProps> = ({ role, materiId, l
               )}
             </div>
             
-            {/* Tombol Hapus (Hanya muncul saat di-hover dan role adalah guru) */}
+            {/* Tombol Hapus & Preview (Hanya muncul saat di-hover dan role adalah guru) */}
             {role === 'guru' && (
-              <button 
-                onClick={(e) => requestDelete(e, lat)} 
-                className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl opacity-0 group-hover:opacity-100 transition-all"
-              >
-                <Trash2 size={18} />
-              </button>
+              <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation(); // Mencegah masuk ke mode editor
+                    setActiveLatihanId(lat.id);
+                    setCurrentView('viewer'); // Buka mode preview
+                  }} 
+                  className="p-2 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-xl"
+                  title="Pratinjau sebagai Siswa"
+                >
+                  <FileBadge size={18} />
+                </button>
+                <button 
+                  onClick={(e) => requestDelete(e, lat)} 
+                  className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl"
+                  title="Hapus Latihan"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
             )}
           </div>
         ))}

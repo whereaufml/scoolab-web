@@ -1,6 +1,10 @@
+
 import React, { useState } from 'react';
 import { ArrowLeft, Plus, Trash2, CheckCircle2, Clock, Link as LinkIcon, Image as ImageIcon, Video } from 'lucide-react';
 import { generateId } from '../lkpd/constants';
+
+// Cukup panggil komponennya menggunakan import ini:
+import MathKeyboard from '../../components/MathKeyboard';
 
 interface UjianBuilderProps {
   ujianItem: any;
@@ -68,7 +72,12 @@ const UjianBuilder: React.FC<UjianBuilderProps> = ({ ujianItem, onSave, onBack }
               <button onClick={() => setQuestions(questions.filter(item => item.id !== q.id))} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
             </div>
 
-            <textarea placeholder="Pertanyaan (Gunakan tanda $ untuk rumus MTK)..." value={q.content} onChange={e => updateQuestion(q.id, 'content', e.target.value)} className="w-full p-3 border border-slate-200 bg-slate-50 rounded-xl text-sm outline-none mb-2 focus:border-indigo-500" rows={3} />
+            {/* Menampilkan Keyboard Matematika */}
+            <MathKeyboard 
+              onInsert={(sym) => updateQuestion(q.id, 'content', (q.content || '') + sym)} 
+            />
+
+            <textarea placeholder="Tuliskan pertanyaan di sini..." value={q.content} onChange={e => updateQuestion(q.id, 'content', e.target.value)} className="w-full p-3 border border-slate-200 bg-slate-50 rounded-xl text-sm outline-none mb-2 focus:border-indigo-500" rows={3} />
             
             <div className="flex items-center gap-2 mb-3">
               <div className="flex bg-slate-100 p-1 rounded-lg">
