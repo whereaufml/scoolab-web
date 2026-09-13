@@ -3,6 +3,8 @@ import { Users, FolderOpen, BarChart2 } from 'lucide-react';
 import { DashboardLayout, DashboardCard } from '../portal_pembelajaran_scoolab';
 import DataSiswaModule from '../users/DataSiswaModule';
 import MateriModule from '../materi/MateriModule';
+// Memanggil komponen Evaluasi (Pastikan letak foldernya benar, mundur satu folder lalu masuk ke penilaian)
+import EvaluationModule from '../penilaian/EvaluationModule'; 
 
 const TeacherDashboard = ({ 
   user, activeServer, onChangeServer, onLogout, usersDb, 
@@ -21,7 +23,9 @@ const TeacherDashboard = ({
           <DashboardCard title="Evaluasi & Nilai" desc="Rekap analisis nilai siswa" icon={BarChart2} color="bg-rose-50 border border-rose-100 text-rose-600" onClick={() => setCurrentView('evaluasi')} />
         </div>
       )}
+      
       {currentView === 'data_siswa' && <DataSiswaModule classId={activeServer.id} usersDb={usersDb} onBack={() => setCurrentView('main')} />}
+      
       {currentView.includes('materi') && (
         <MateriModule 
           role="guru" 
@@ -40,6 +44,11 @@ const TeacherDashboard = ({
           onOpenMateriDetail={(id: string) => { setActiveMateriId(id); setCurrentView('materi_detail'); }} 
           onBack={() => { setCurrentView('materi_list'); setActiveMateriId(null); }} 
         />
+      )}
+
+      {/* Menampilkan Modul Evaluasi Marun untuk Guru */}
+      {currentView === 'evaluasi' && (
+        <EvaluationModule role="guru" userData={user} />
       )}
     </DashboardLayout>
   );

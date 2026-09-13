@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { 
-  AlertCircle, CheckCircle, LogOut, BarChart2, Calculator, X, ShieldAlert, Smartphone, ArrowLeft, FolderOpen, Trash2, Settings, Lock, AlertTriangle, Users
+  AlertCircle, CheckCircle, LogOut, BarChart2, Calculator, X, ShieldAlert, Smartphone, ArrowLeft, FolderOpen, Trash2, Settings, Lock, AlertTriangle
 } from 'lucide-react';
 
 import { spldvTemplateUjian } from './materi/ujian/spldvUjianData';
@@ -8,7 +8,9 @@ import MateriModule from './materi/MateriModule';
 import TeacherServerLobby from './dashboard/TeacherServerLobby'; 
 import LoginPage from './auth/LoginPage';
 import TeacherDashboard from './dashboard/TeacherDashboard';
+import AdminDashboard from './dashboard/AdminDashboard'; // Mengimpor AdminDashboard asli yang lengkap
 import { spldvTemplateLatihan } from './materi/latihan/spldvLatihanData';
+import EvaluationModule from './penilaian/EvaluationModule';
 
 const INITIAL_LKPD = [
   {
@@ -33,7 +35,6 @@ const INITIAL_MATERI = [
   { id: 'mat_1', classId: 'cls_8a', title: 'Bab 1: Konsep Dasar SPLDV', desc: 'Mengenal variabel, konstanta, dan penyelesaian dengan metode grafik.', isDeleted: false, deletedAt: null }
 ];
 
-// PENAMBAHAN DATABASE: Memasukkan role admin ke dalam struktur
 const INITIAL_USERS_DB = {
   admin: {
     "admin_utama": { id: "a1", pass: "admin123" }
@@ -50,7 +51,6 @@ const INITIAL_USERS_DB = {
   }
 };
 
-// ... (Komponen SingleDeviceConflictModal, ChangePasswordModal, ReusableDeleteConfirmModal, DashboardCard, DashboardLayout tetap sama persis seperti kode sebelumnya) ...
 const SingleDeviceConflictModal = memo(({ isOpen, username, onKeepSession, onLogout }: any) => {
   if (!isOpen) return null;
   return (
@@ -177,19 +177,6 @@ export const DashboardLayout = memo(({ user, activeServer, onChangeServer, onLog
   );
 });
 
-// KOMPONEN DRAFT ADMIN: Tampilan sementara untuk Admin
-const AdminDashboard = memo(({ user, onLogout, onChangePassword }: any) => {
-  return (
-    <DashboardLayout user={user} onLogout={onLogout} onChangePassword={onChangePassword}>
-      <div className="bg-indigo-50 border border-indigo-100 rounded-3xl p-8 text-center max-w-2xl mx-auto mt-10">
-        <Users size={48} className="mx-auto text-indigo-600 mb-4" />
-        <h2 className="text-2xl font-bold text-slate-800 mb-2">Selamat Datang, Administrator</h2>
-        <p className="text-slate-600">Halaman ini nantinya akan berisi alat untuk mengatur data Siswa dan Guru. (Akan dikembangkan pada tahap selanjutnya).</p>
-      </div>
-    </DashboardLayout>
-  );
-});
-
 const StudentDashboard = memo(({ user, activeServer, onLogout, materiData, lkpdDb, setLkpdDb, latihanDb, setLatihanDb, ujianDb, setUjianDb, onChangePassword }: any) => {
   const [currentView, setCurrentView] = useState('main'); 
   const [activeMateriId, setActiveMateriId] = useState<any>(null);
@@ -201,9 +188,11 @@ const StudentDashboard = memo(({ user, activeServer, onLogout, materiData, lkpdD
       {currentView === 'main' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
           <DashboardCard title="Materi Pembelajaran" desc="LKPD, Latihan Soal, Asesmen" icon={FolderOpen} color="bg-blue-50 border border-blue-100 text-blue-600" onClick={() => setCurrentView('materi_list')} />
-          <DashboardCard title="Evaluasi Akhir" desc="Lihat rekap nilai belajarmu" icon={BarChart2} color="bg-orange-50 border border-orange-100 text-orange-600" onClick={() => setCurrentView('evaluasi')} />
+          <DashboardCard title="Evaluasi Akhir" desc="Lihat rekap nilai belajarmu" icon={BarChart2} color="bg-rose-50 border border-rose-100 text-rose-600" onClick={() => setCurrentView('evaluasi')} />
         </div>
       )}
+      
+      {/* Menampilkan Modul Materi */}
       {currentView.includes('materi') && (
         <MateriModule 
           role="siswa" 
@@ -220,6 +209,11 @@ const StudentDashboard = memo(({ user, activeServer, onLogout, materiData, lkpdD
           onOpenMateriDetail={(id: any) => { setActiveMateriId(id); setCurrentView('materi_detail'); }} 
           onBack={()=>{setCurrentView('materi_list'); setActiveMateriId(null);}} 
         />
+      )}
+
+      {/* Menampilkan Modul Evaluasi Marun untuk Siswa */}
+      {currentView === 'evaluasi' && (
+        <EvaluationModule role="siswa" userData={user} />
       )}
     </DashboardLayout>
   );
@@ -330,14 +324,13 @@ const App = () => {
     return null; 
   }, [user, usersDb]);
 
-  // LOGIKA PELINDUNG: Jika belum login, tampilkan draft LoginPage yang baru
   if (!user) return <LoginPage onLogin={handleLogin} usersDb={usersDb} />;
   
-  // PENAMBAHAN RUTING: Mengarahkan Admin ke halamannya sendiri
+  // Mengarahkan akun admin langsung ke AdminDashboard lengkap yang modular
   if (user.role === 'admin') {
     return (
       <>
-        <AdminDashboard user={user} onLogout={() => setShowLogoutModal(true)} onChangePassword={handleChangePassword} />
+        <AdminDashboard user={user} onLogout={() => setShowLogoutModal(true)} />
         <LogoutConfirmModal isOpen={showLogoutModal} onConfirm={handleLogout} onCancel={() => setShowLogoutModal(false)} />
       </>
     );

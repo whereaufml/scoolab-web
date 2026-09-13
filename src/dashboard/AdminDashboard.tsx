@@ -110,7 +110,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
           </div>
         )}
 
-        {/* Area Konten Utama yang Sudah Dirapikan */}
+        {/* Area Konten Utama */}
         <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50">
           {activeMenu === 'dashboard' ? (
             <div className="space-y-6">
