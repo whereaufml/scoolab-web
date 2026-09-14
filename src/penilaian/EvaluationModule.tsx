@@ -12,7 +12,7 @@ const EvaluationModule: React.FC<EvaluationModuleProps> = ({ role, userData }) =
   // Data tiruan rekap nilai siswa
   const studentGrades = [
     { type: 'LKPD 1: Konsep Dasar SPLDV', score: 85, status: 'Tuntas', date: '10 Sep 2026' },
-    { type: 'Latihan Soal Metode Grafik', score: 90, status: 'Tuntas', date: '12 Sep 2026' },
+    { type: 'Latihan Soal Metode Campuran', score: 90, status: 'Tuntas', date: '12 Sep 2026' },
     { type: 'Asesmen / Ujian Bab 1', score: 78, status: 'Tuntas', date: '14 Sep 2026' },
   ];
 

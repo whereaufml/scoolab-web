@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { 
-  AlertCircle, CheckCircle, LogOut, BarChart2, Calculator, X, ShieldAlert, Smartphone, ArrowLeft, FolderOpen, Trash2, Settings, Lock, AlertTriangle
+  AlertCircle, CheckCircle, LogOut, BarChart2, Calculator, X, ShieldAlert, Smartphone, ArrowLeft, FolderOpen, Trash2, Settings, Lock, AlertTriangle, Calendar, Clock
 } from 'lucide-react';
 
 import { spldvTemplateUjian } from './materi/ujian/spldvUjianData';
@@ -8,7 +8,7 @@ import MateriModule from './materi/MateriModule';
 import TeacherServerLobby from './dashboard/TeacherServerLobby'; 
 import LoginPage from './auth/LoginPage';
 import TeacherDashboard from './dashboard/TeacherDashboard';
-import AdminDashboard from './dashboard/AdminDashboard'; // Mengimpor AdminDashboard asli yang lengkap
+import AdminDashboard from './dashboard/AdminDashboard'; 
 import { spldvTemplateLatihan } from './materi/latihan/spldvLatihanData';
 import EvaluationModule from './penilaian/EvaluationModule';
 
@@ -186,9 +186,37 @@ const StudentDashboard = memo(({ user, activeServer, onLogout, materiData, lkpdD
   return (
     <DashboardLayout user={user} activeServer={activeServer} onLogout={onLogout} onBack={currentView !== 'main' ? () => {setCurrentView('main'); setActiveMateriId(null);} : null} onChangePassword={onChangePassword}>
       {currentView === 'main' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
-          <DashboardCard title="Materi Pembelajaran" desc="LKPD, Latihan Soal, Asesmen" icon={FolderOpen} color="bg-blue-50 border border-blue-100 text-blue-600" onClick={() => setCurrentView('materi_list')} />
-          <DashboardCard title="Evaluasi Akhir" desc="Lihat rekap nilai belajarmu" icon={BarChart2} color="bg-rose-50 border border-rose-100 text-rose-600" onClick={() => setCurrentView('evaluasi')} />
+        <div className="space-y-6 max-w-3xl">
+          
+          {/* KOTAK JADWAL SISWA (Nuansa Ungu Muda) */}
+          <div className="bg-purple-100 border border-purple-200 p-5 md:p-6 rounded-3xl shadow-sm flex flex-col md:flex-row md:items-center gap-4 animate-in fade-in">
+            <div className="w-14 h-14 bg-purple-200 text-purple-700 rounded-2xl flex items-center justify-center shrink-0">
+              <Calendar size={28} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-purple-900 mb-3 md:mb-2">Jadwal Hari Ini: Senin, 14 September 2026</h3>
+              <div className="flex flex-col sm:flex-row gap-3 text-sm text-purple-800 font-medium">
+                <div className="flex items-center gap-2 bg-purple-50 px-3 py-2 rounded-xl border border-purple-200">
+                  <Clock size={16} className="text-purple-600 shrink-0" /> 
+                  <span>08:00 - 09:30 | Matematika</span>
+                </div>
+                <div className="flex items-center gap-2 bg-purple-50 px-3 py-2 rounded-xl border border-purple-200">
+                  <Clock size={16} className="text-purple-600 shrink-0" /> 
+                  <span>10:00 - 11:30 | B. Indonesia</span>
+                </div>
+              </div>
+            </div>
+            {/* Tombol Dummy (belum memiliki aksi) */}
+            <button className="mt-2 md:mt-0 px-4 py-3 md:py-2.5 bg-purple-200/50 text-purple-500 text-sm font-bold rounded-xl md:ml-auto w-full md:w-auto text-center cursor-not-allowed border border-purple-300">
+              Detail Jadwal
+            </button>
+          </div>
+
+          {/* Grid Menu Utama Siswa */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <DashboardCard title="Materi Pembelajaran" desc="LKPD, Latihan Soal, Asesmen" icon={FolderOpen} color="bg-blue-50 border border-blue-100 text-blue-600" onClick={() => setCurrentView('materi_list')} />
+            <DashboardCard title="Evaluasi Akhir" desc="Lihat rekap nilai belajarmu" icon={BarChart2} color="bg-rose-50 border border-rose-100 text-rose-600" onClick={() => setCurrentView('evaluasi')} />
+          </div>
         </div>
       )}
       
@@ -326,7 +354,6 @@ const App = () => {
 
   if (!user) return <LoginPage onLogin={handleLogin} usersDb={usersDb} />;
   
-  // Mengarahkan akun admin langsung ke AdminDashboard lengkap yang modular
   if (user.role === 'admin') {
     return (
       <>
