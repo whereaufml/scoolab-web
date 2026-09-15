@@ -1,208 +1,415 @@
 import React, { useState } from 'react';
-import { BookOpen, Users, ArrowLeft, UserX, Clock, MonitorPlay, UserCheck, ChevronRight } from 'lucide-react';
+import {
+  BookOpen, Users, ArrowLeft, Trash2, Plus, Edit3,
+  UserX, AlertTriangle, ChevronRight, X, RotateCcw
+} from 'lucide-react';
 
-// --- DATA TIRUAN ---
-const MOCK_GRADES = [
-  { id: 7, label: 'Kelas 7', muridAktif: 245, guruAktif: 12 },
-  { id: 8, label: 'Kelas 8', muridAktif: 230, guruAktif: 11 },
-  { id: 9, label: 'Kelas 9', muridAktif: 250, guruAktif: 14 },
+// --- TIPE DATA ---
+interface UserItem {
+  id: string;
+  name: string;
+  role: 'Guru' | 'Siswa';
+  subject?: string;
+  class?: string;
+}
+
+interface TrashItem {
+  id: string;
+  name: string;
+  deletedAt: string;
+  expireDays: number;
+  // menyimpan info asal data supaya bisa dipulihkan ke tempat yang benar
+  origin:
+    | { type: 'user'; user: UserItem }
+    | { type: 'member'; classKey: string; memberName: string };
+}
+
+// --- DATA SEMENTARA ---
+const INITIAL_USERS: UserItem[] = [
+  { id: 'u1', name: 'Bpk. Budi Santoso', role: 'Guru', subject: 'Matematika' },
+  { id: 'u2', name: 'Andi Wijaya', role: 'Siswa', class: '7A' },
 ];
 
-const CLASS_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+const GRADES = [7, 8, 9];
+const CLASSES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
 
-const MOCK_ABSENCES = {
-  guru: ['Bpk. Budi (Sakit)', 'Ibu Siti (Izin Keluarga)'],
-  murid: ['Andi - 7A (Sakit)', 'Beni - 7C (Izin)', 'Citra - 7F (Alfa)']
+const INITIAL_CLASS_MEMBERS: Record<string, string[]> = {
+  '7A': ['Andi Wijaya'],
 };
 
-const MOCK_CLASS_DATA = {
-  guruSaatIni: 'Ibu Ratna (Matematika)',
-  waktu: '08:00 - 09:30 WIB',
-  muridOnline: ['Andi Wijaya', 'Budi Santoso', 'Cici Permata', 'Deni Setiawan', 'Eka Putri']
-};
+const DEFAULT_WALI_KELAS = 'Ibu Ratna Susanti';
 
 const AcademicManagement: React.FC = () => {
-  // State untuk melacak posisi layar (level 1, 2, atau 3)
-  const [viewLevel, setViewLevel] = useState<'grades' | 'grade_detail' | 'class_detail'>('grades');
+  const [view, setView] = useState<'main' | 'users' | 'classes' | 'class_detail'>('main');
   const [selectedGrade, setSelectedGrade] = useState<number | null>(null);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
 
-  // Fungsi navigasi
-  const handleGradeClick = (grade: number) => {
+  // --- DATA UTAMA (STATE, BUKAN LAGI KONSTANTA) ---
+  const [users, setUsers] = useState<UserItem[]>(INITIAL_USERS);
+  const [classMembers, setClassMembers] = useState<Record<string, string[]>>(INITIAL_CLASS_MEMBERS);
+  const [waliKelasMap, setWaliKelasMap] = useState<Record<string, string>>({});
+
+  // --- TONG SAMPAH & KONFIRMASI HAPUS ---
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashItems, setTrashItems] = useState<TrashItem[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<
+    { isOpen: false } | { isOpen: true; label: string; origin: TrashItem['origin'] }
+  >({ isOpen: false });
+
+  // --- MODAL TAMBAH USER ---
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'Guru' | 'Siswa'>('Siswa');
+  const [newUserSubject, setNewUserSubject] = useState('');
+  const [newUserClass, setNewUserClass] = useState('7A');
+
+  // --- MODAL TAMBAH SISWA KE KELAS ---
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [newMemberName, setNewMemberName] = useState('');
+
+  const classKey = selectedGrade && selectedClass ? `${selectedGrade}${selectedClass}` : '';
+  const currentWaliKelas = waliKelasMap[classKey] || DEFAULT_WALI_KELAS;
+
+  const handleOpenClass = (grade: number, cls: string) => {
     setSelectedGrade(grade);
-    setViewLevel('grade_detail');
+    setSelectedClass(cls);
+    setView('class_detail');
   };
 
-  const handleClassClick = (className: string) => {
-    setSelectedClass(className);
-    setViewLevel('class_detail');
+  // --- HAPUS: PINDAHKAN DATA ASLI KE TONG SAMPAH ---
+  const requestDeleteUser = (user: UserItem) => {
+    setDeleteConfirm({ isOpen: true, label: user.name, origin: { type: 'user', user } });
   };
 
-  const goBack = () => {
-    if (viewLevel === 'class_detail') setViewLevel('grade_detail');
-    else if (viewLevel === 'grade_detail') {
-      setViewLevel('grades');
-      setSelectedGrade(null);
+  const requestDeleteMember = (memberName: string) => {
+    setDeleteConfirm({ isOpen: true, label: `${memberName} (dari kelas)`, origin: { type: 'member', classKey, memberName } });
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deleteConfirm.isOpen) return;
+    const { origin, label } = deleteConfirm;
+
+    if (origin.type === 'user') {
+      setUsers(prev => prev.filter(u => u.id !== origin.user.id));
+    } else {
+      setClassMembers(prev => ({
+        ...prev,
+        [origin.classKey]: (prev[origin.classKey] || []).filter(m => m !== origin.memberName),
+      }));
+    }
+
+    const newTrashItem: TrashItem = {
+      id: `t_${Date.now()}`,
+      name: label,
+      deletedAt: 'Hari ini',
+      expireDays: 30,
+      origin,
+    };
+    setTrashItems(prev => [newTrashItem, ...prev]);
+    setDeleteConfirm({ isOpen: false });
+  };
+
+  // --- PULIHKAN DARI TONG SAMPAH ---
+  const handleRestore = (item: TrashItem) => {
+    if (item.origin.type === 'user') {
+      // Ambil nilainya dulu di sini (masih dalam scope yang sudah dipersempit tipenya),
+      // baru dipakai di dalam callback — supaya TypeScript tidak "lupa" tipe originnya.
+      const restoredUser = item.origin.user;
+      setUsers(prev => [restoredUser, ...prev]);
+    } else {
+      const { classKey, memberName } = item.origin;
+      setClassMembers(prev => ({
+        ...prev,
+        [classKey]: [memberName, ...(prev[classKey] || [])],
+      }));
+    }
+    setTrashItems(prev => prev.filter(t => t.id !== item.id));
+  };
+
+  // --- TAMBAH USER BARU ---
+  const openAddUserModal = () => {
+    setNewUserName('');
+    setNewUserRole('Siswa');
+    setNewUserSubject('');
+    setNewUserClass('7A');
+    setShowAddUserModal(true);
+  };
+
+  const handleAddUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserName.trim()) return;
+
+    const newUser: UserItem = {
+      id: `u_${Date.now()}`,
+      name: newUserName.trim(),
+      role: newUserRole,
+      ...(newUserRole === 'Guru' ? { subject: newUserSubject || '-' } : { class: newUserClass }),
+    };
+    setUsers(prev => [newUser, ...prev]);
+    setShowAddUserModal(false);
+  };
+
+  // --- EDIT WALI KELAS ---
+  const handleEditWaliKelas = () => {
+    const input = window.prompt('Nama wali kelas baru:', currentWaliKelas);
+    if (input && input.trim()) {
+      setWaliKelasMap(prev => ({ ...prev, [classKey]: input.trim() }));
     }
   };
 
+  // --- TAMBAH SISWA KE KELAS ---
+  const handleAddMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMemberName.trim()) return;
+    setClassMembers(prev => ({
+      ...prev,
+      [classKey]: [...(prev[classKey] || []), newMemberName.trim()],
+    }));
+    setNewMemberName('');
+    setShowAddMemberModal(false);
+  };
+
+  const currentMembers = classMembers[classKey] || [];
+
   return (
-    <div className="p-4 md:p-8 space-y-6">
-      {/* Header dengan Tombol Kembali dinamis */}
+    <div className="p-4 md:p-8 space-y-6 relative min-h-[80vh]">
+      {/* --- HEADER --- */}
       <div className="mb-6 flex items-center gap-4">
-        {viewLevel !== 'grades' && (
-          <button 
-            onClick={goBack}
-            className="p-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-xl transition-colors"
-            title="Kembali"
-          >
+        {view !== 'main' && (
+          <button onClick={() => setView(view === 'class_detail' ? 'classes' : 'main')} className="p-2 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-xl transition-colors">
             <ArrowLeft size={20} />
           </button>
         )}
         <div>
-          <h2 className="text-2xl font-bold text-purple-900">
-            {viewLevel === 'grades' ? 'Manajemen Akademik' : 
-             viewLevel === 'grade_detail' ? `Detail Akademik Kelas ${selectedGrade}` : 
-             `Pantauan Langsung Kelas ${selectedGrade}${selectedClass}`}
+          <h2 className="text-2xl font-bold text-indigo-900">
+            {view === 'main' ? 'Manajemen Terpadu' :
+             view === 'users' ? 'Daftar Murid & Guru' :
+             view === 'classes' ? 'Manajemen Ruang Kelas' :
+             `Kelas ${selectedGrade}${selectedClass}`}
           </h2>
-          <p className="text-purple-600 text-sm mt-1">
-            {viewLevel === 'grades' ? 'Pantau aktivitas siswa dan kelas per jenjang.' : 
-             viewLevel === 'grade_detail' ? 'Data absensi dan daftar kelas.' : 
-             'Status guru mengajar dan siswa yang sedang login.'}
-          </p>
+          <p className="text-indigo-600 text-sm mt-1">Kelola data keanggotaan dan struktur kelas akademik.</p>
         </div>
       </div>
 
-      {/* LAYAR 1: Ringkasan Jenjang */}
-      {viewLevel === 'grades' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {MOCK_GRADES.map((grade) => (
-            <button
-              key={grade.id}
-              onClick={() => handleGradeClick(grade.id)}
-              className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm hover:shadow-md hover:border-purple-300 transition-all duration-300 group text-left relative overflow-hidden"
-            >
-              <div className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>
-              
-              <div className="flex justify-between items-start mb-6">
-                <h3 className="text-3xl font-bold text-purple-800">{grade.label}</h3>
-                <div className="p-3 bg-purple-100 text-purple-600 rounded-2xl group-hover:scale-110 group-hover:bg-purple-600 group-hover:text-white transition-all duration-300">
-                  <BookOpen size={28} />
-                </div>
-              </div>
+      {/* --- TAMPILAN 1: MENU UTAMA --- */}
+      {view === 'main' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in">
+          <button onClick={() => setView('users')} className="bg-white p-8 rounded-3xl border border-indigo-100 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left group">
+            <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+              <Users size={32} />
+            </div>
+            <h3 className="text-2xl font-bold text-slate-800 mb-2">Daftar Murid & Guru</h3>
+            <p className="text-slate-500 text-sm">Tambah, edit, atau hapus profil siswa dan guru pengajar secara manual.</p>
+          </button>
 
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 p-2 bg-purple-50 rounded-xl border border-purple-100/50">
-                  <UserCheck size={18} className="text-purple-500" />
-                  <span className="text-sm font-medium text-purple-900">{grade.muridAktif} Murid Aktif Hari Ini</span>
+          <button onClick={() => setView('classes')} className="bg-white p-8 rounded-3xl border border-indigo-100 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left group">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+              <BookOpen size={32} />
+            </div>
+            <h3 className="text-2xl font-bold text-slate-800 mb-2">Manajemen Kelas</h3>
+            <p className="text-slate-500 text-sm">Atur jenjang kelas (A-I), tentukan wali kelas, dan kelompokkan siswa.</p>
+          </button>
+        </div>
+      )}
+
+      {/* --- TAMPILAN 2: DAFTAR PENGGUNA --- */}
+      {view === 'users' && (
+        <div className="bg-white rounded-3xl shadow-sm border border-indigo-100 overflow-hidden animate-in fade-in">
+          <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50/50">
+            <h3 className="font-bold text-indigo-900">Semua Pengguna</h3>
+            <button onClick={openAddUserModal} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl flex items-center gap-2">
+              <Plus size={16} /> Tambah Data
+            </button>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {users.length === 0 && <p className="p-6 text-center text-sm text-slate-400">Belum ada data pengguna.</p>}
+            {users.map(u => (
+              <div key={u.id} className="p-4 flex items-center justify-between hover:bg-slate-50">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">{u.name.charAt(0)}</div>
+                  <div>
+                    <p className="font-bold text-slate-800">{u.name}</p>
+                    <p className="text-xs text-slate-500">{u.role} {u.subject ? `• ${u.subject}` : `• Kelas ${u.class}`}</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 p-2 bg-purple-50 rounded-xl border border-purple-100/50">
-                  <Users size={18} className="text-purple-500" />
-                  <span className="text-sm font-medium text-purple-900">{grade.guruAktif} Guru Aktif Hari Ini</span>
+                <div className="flex gap-2">
+                  <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit3 size={18} /></button>
+                  <button onClick={() => requestDeleteUser(u)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
                 </div>
               </div>
-            </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* --- TAMPILAN 3: MANAJEMEN KELAS --- */}
+      {view === 'classes' && (
+        <div className="space-y-8 animate-in fade-in">
+          {GRADES.map(grade => (
+            <div key={grade} className="bg-white p-6 rounded-3xl border border-indigo-100 shadow-sm">
+              <h3 className="text-xl font-bold text-indigo-900 mb-4 border-b border-indigo-50 pb-2">Jenjang Kelas {grade}</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                {CLASSES.map(cls => (
+                  <button
+                    key={cls}
+                    onClick={() => handleOpenClass(grade, cls)}
+                    className="py-4 px-3 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded-2xl font-bold text-lg transition-colors flex justify-between items-center group"
+                  >
+                    <span>{grade}{cls}</span>
+                    <ChevronRight size={18} className="opacity-50 group-hover:opacity-100" />
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
 
-      {/* LAYAR 2: Detail Jenjang & Daftar Kelas A-I */}
-      {viewLevel === 'grade_detail' && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-          
-          {/* Panel Absensi */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-rose-100 shadow-sm">
-              <div className="flex items-center gap-2 text-rose-600 font-bold mb-3 border-b border-rose-50 pb-2">
-                <UserX size={18} /> Guru Absen Hari Ini
-              </div>
-              <ul className="space-y-2">
-                {MOCK_ABSENCES.guru.map((guru, idx) => (
-                  <li key={idx} className="text-sm text-slate-700 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-100">{guru}</li>
-                ))}
-              </ul>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-orange-100 shadow-sm">
-              <div className="flex items-center gap-2 text-orange-600 font-bold mb-3 border-b border-orange-50 pb-2">
-                <UserX size={18} /> Murid Absen Hari Ini
-              </div>
-              <ul className="space-y-2">
-                {MOCK_ABSENCES.murid.map((murid, idx) => (
-                  <li key={idx} className="text-sm text-slate-700 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">{murid}</li>
-                ))}
-              </ul>
+      {/* --- TAMPILAN 4: DETAIL KELAS --- */}
+      {view === 'class_detail' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in">
+          <div className="md:col-span-1">
+            <div className="bg-indigo-600 p-6 rounded-3xl text-white shadow-md">
+              <p className="text-indigo-200 text-sm mb-1">Wali Kelas Saat Ini</p>
+              <h3 className="text-xl font-bold mb-4">{currentWaliKelas}</h3>
+              <button onClick={handleEditWaliKelas} className="w-full py-2 bg-white text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50">Edit Wali Kelas</button>
             </div>
           </div>
-
-          {/* Grid Daftar Kelas */}
-          <div>
-            <h3 className="text-lg font-bold text-purple-900 mb-4 flex items-center gap-2">
-              <BookOpen size={20} className="text-purple-500" /> Daftar Ruang Kelas
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-              {CLASS_LETTERS.map((letter) => (
-                <button
-                  key={letter}
-                  onClick={() => handleClassClick(letter)}
-                  className="bg-white py-4 px-3 rounded-2xl border border-purple-100 shadow-sm hover:bg-purple-600 hover:text-white transition-all duration-300 group flex justify-between items-center"
-                >
-                  <span className="font-bold text-lg text-purple-800 group-hover:text-white transition-colors">
-                    {selectedGrade}{letter}
-                  </span>
-                  <ChevronRight size={18} className="text-purple-300 group-hover:text-purple-200 group-hover:translate-x-1 transition-all" />
-                </button>
+          <div className="md:col-span-2 bg-white border border-indigo-100 rounded-3xl p-6 shadow-sm">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-slate-800">Daftar Anggota Kelas</h3>
+              <button onClick={() => setShowAddMemberModal(true)} className="text-sm font-bold text-indigo-600 hover:text-indigo-800">+ Tambah Siswa</button>
+            </div>
+            <div className="space-y-2">
+              {currentMembers.length === 0 && (
+                <p className="text-sm text-slate-400 text-center py-6">Belum ada siswa di kelas ini.</p>
+              )}
+              {currentMembers.map((member, idx) => (
+                <div key={member} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="font-semibold text-slate-700">{idx + 1}. {member}</span>
+                  <button onClick={() => requestDeleteMember(member)} className="text-red-500 hover:text-red-700 p-1"><UserX size={16} /></button>
+                </div>
               ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* LAYAR 3: Pantauan Langsung Kelas */}
-      {viewLevel === 'class_detail' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in zoom-in-95 duration-200">
-          
-          {/* Info Guru Mengajar */}
-          <div className="md:col-span-1 space-y-4">
-            <div className="bg-purple-600 p-6 rounded-3xl text-white shadow-md relative overflow-hidden">
-              <Clock size={80} className="absolute -bottom-4 -right-4 opacity-10" />
-              <h3 className="font-semibold text-purple-200 mb-1">Sedang Berlangsung</h3>
-              <p className="text-xl font-bold mb-4">{MOCK_CLASS_DATA.waktu}</p>
-              
-              <div className="bg-purple-700/50 p-4 rounded-2xl backdrop-blur-sm border border-purple-500/30">
-                <p className="text-xs text-purple-200 mb-1">Guru Pengajar</p>
-                <p className="font-bold">{MOCK_CLASS_DATA.guruSaatIni}</p>
-              </div>
-              <button className="w-full mt-4 py-2.5 bg-white text-purple-700 font-bold rounded-xl text-sm hover:bg-purple-50 transition-colors">
-                Ubah Guru Pengganti
-              </button>
-            </div>
-          </div>
+      {/* --- TONG SAMPAH --- */}
+      <div className="fixed md:absolute bottom-6 left-6 z-40">
+        <button
+          onClick={() => setShowTrash(!showTrash)}
+          className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl transition-transform hover:scale-105"
+        >
+          <Trash2 size={20} className="text-rose-400" />
+          <span className="font-bold text-sm hidden md:inline">Tong Sampah</span>
+          <span className="bg-rose-500 text-white text-xs px-2 py-0.5 rounded-full">{trashItems.length}</span>
+        </button>
 
-          {/* Daftar Murid Online */}
-          <div className="md:col-span-2 bg-white rounded-3xl border border-purple-100 shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4 pb-4 border-b border-purple-50">
-              <h3 className="font-bold text-purple-900 flex items-center gap-2">
-                <MonitorPlay size={20} className="text-emerald-500" /> 
-                Murid Sedang Login (Web)
-              </h3>
-              <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">
-                {MOCK_CLASS_DATA.muridOnline.length} Online
-              </span>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {MOCK_CLASS_DATA.muridOnline.map((nama, idx) => (
-                <div key={idx} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-purple-50 border border-slate-100 hover:border-purple-200 rounded-xl transition-colors cursor-default">
-                  <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 border border-emerald-200 relative">
-                    <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></div>
-                    <UserCheck size={14} />
+        {showTrash && (
+          <div className="absolute bottom-16 left-0 w-80 bg-white border border-slate-200 shadow-2xl rounded-3xl p-5 animate-in slide-in-from-bottom-4">
+            <h4 className="font-bold text-slate-800 mb-1">Barang Dihapus</h4>
+            <p className="text-xs text-slate-500 mb-4">Akan dihapus permanen dalam 30 hari.</p>
+            <div className="space-y-3 max-h-60 overflow-y-auto">
+              {trashItems.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Tong sampah kosong.</p>}
+              {trashItems.map(item => (
+                <div key={item.id} className="p-3 bg-rose-50 border border-rose-100 rounded-xl">
+                  <p className="font-semibold text-sm text-slate-800">{item.name}</p>
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="text-[10px] text-rose-500 font-bold">{item.expireDays} hari tersisa</span>
+                    <button onClick={() => handleRestore(item)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                      <RotateCcw size={12} /> Pulihkan
+                    </button>
                   </div>
-                  <span className="text-sm font-semibold text-slate-700">{nama}</span>
                 </div>
               ))}
             </div>
           </div>
+        )}
+      </div>
 
+      {/* --- MODAL KONFIRMASI HAPUS --- */}
+      {deleteConfirm.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white p-6 rounded-3xl max-w-sm w-full text-center shadow-2xl animate-in zoom-in-95">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle size={32} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Hapus Data?</h3>
+            <p className="text-sm text-slate-600 mb-6">
+              Apakah kamu yakin ingin menghapus <strong>{deleteConfirm.label}</strong>? Data akan dipindahkan ke Tong Sampah selama 30 hari sebelum dihapus permanen.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm({ isOpen: false })} className="flex-1 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200">Batal</button>
+              <button onClick={handleConfirmDelete} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700">Ya, Hapus</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL TAMBAH USER --- */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-lg text-slate-800">Tambah Murid / Guru</h3>
+              <button onClick={() => setShowAddUserModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleAddUser} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Lengkap</label>
+                <input value={newUserName} onChange={e => setNewUserName(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" required />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Peran</label>
+                <select value={newUserRole} onChange={e => setNewUserRole(e.target.value as 'Guru' | 'Siswa')} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                  <option value="Siswa">Siswa</option>
+                  <option value="Guru">Guru</option>
+                </select>
+              </div>
+              {newUserRole === 'Guru' ? (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Mata Pelajaran</label>
+                  <input value={newUserSubject} onChange={e => setNewUserSubject(e.target.value)} placeholder="Matematika" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Kelas</label>
+                  <select value={newUserClass} onChange={e => setNewUserClass(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                    {GRADES.flatMap(g => CLASSES.map(c => `${g}${c}`)).map(k => (
+                      <option key={k} value={k}>{k}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddUserModal(false)} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-xl">Batal</button>
+                <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl">Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL TAMBAH SISWA KE KELAS --- */}
+      {showAddMemberModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-lg text-slate-800">Tambah Siswa ke Kelas {selectedGrade}{selectedClass}</h3>
+              <button onClick={() => setShowAddMemberModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleAddMember} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Siswa</label>
+                <input value={newMemberName} onChange={e => setNewMemberName(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" required />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-xl">Batal</button>
+                <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl">Tambah</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
