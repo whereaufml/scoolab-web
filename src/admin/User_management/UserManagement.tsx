@@ -21,11 +21,11 @@ type AnyUser = AdminUser | GuruUser | SiswaUser;
 // --- DATA SEMENTARA ---
 const INITIAL_USERS_DATA: { admin: AdminUser[]; guru: GuruUser[]; siswa: SiswaUser[] } = {
   admin: [{ id: 'a1', nama: 'Admin Utama', usn: 'admin_utama', pass: 'admin123', role: 'admin', kontak: '08123456789' }],
-  guru: [{ id: 'g1', nama: 'Guru Satu', usn: 'Guru 1', pass: 'guru123', role: 'guru', nip: '198001012005011001' }],
-  siswa: [{ id: 's1', nama: 'Siswa Satu', usn: 'Siswa 1', pass: 'siswa123', role: 'siswa', nim: '2026001', kelas: 'Kelas 8A' }],
+  guru: [{ id: 'g1', nama: 'Bpk. Budi Santoso', usn: 'budi_guru', pass: 'guru123', role: 'guru', nip: '198001012005011001' }],
+  siswa: [{ id: 's1', nama: 'Andi Wijaya', usn: 'andi_siswa', pass: 'siswa123', role: 'siswa', nim: '2026001', kelas: '7A' }],
 };
 
-const emptyForm = { nama: '', usn: '', pass: '', kontak: '', nip: '', nim: '', kelas: 'Kelas 8A' };
+const emptyForm = { nama: '', usn: '', pass: '', kontak: '', nip: '', nim: '', kelas: '7A' };
 
 const UserManagement: React.FC = () => {
   const [usersData, setUsersData] = useState(INITIAL_USERS_DATA);
@@ -85,7 +85,7 @@ const UserManagement: React.FC = () => {
       kontak: user.role === 'admin' ? user.kontak : '',
       nip: user.role === 'guru' ? user.nip : '',
       nim: user.role === 'siswa' ? user.nim : '',
-      kelas: user.role === 'siswa' ? user.kelas : 'Kelas 8A',
+      kelas: user.role === 'siswa' ? user.kelas : '7A',
     });
     setIsEditingProfile(true);
   };
@@ -346,7 +346,7 @@ const UserManagement: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-blue-600 mb-1">Kelas</label>
-                    <input value={addForm.kelas} onChange={e => setAddForm({ ...addForm, kelas: e.target.value })} placeholder="Kelas 8A" className="w-full p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm" />
+                    <input value={addForm.kelas} onChange={e => setAddForm({ ...addForm, kelas: e.target.value })} placeholder="7A" className="w-full p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm" />
                   </div>
                 </>
               )}

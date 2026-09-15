@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BookOpen, Users, ArrowLeft, Trash2, Plus, Edit3,
-  UserX, AlertTriangle, ChevronRight, X, RotateCcw
+  UserX, AlertTriangle, ChevronRight, X, RotateCcw, Loader2
 } from 'lucide-react';
+import { supabase } from '../../supabaseClient'; // Menghubungkan ke database Supabase kita
 
 // --- TIPE DATA ---
 interface UserItem {
@@ -18,35 +19,24 @@ interface TrashItem {
   name: string;
   deletedAt: string;
   expireDays: number;
-  // menyimpan info asal data supaya bisa dipulihkan ke tempat yang benar
   origin:
     | { type: 'user'; user: UserItem }
     | { type: 'member'; classKey: string; memberName: string };
 }
 
-// --- DATA SEMENTARA ---
-const INITIAL_USERS: UserItem[] = [
-  { id: 'u1', name: 'Bpk. Budi Santoso', role: 'Guru', subject: 'Matematika' },
-  { id: 'u2', name: 'Andi Wijaya', role: 'Siswa', class: '7A' },
-];
-
 const GRADES = [7, 8, 9];
 const CLASSES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-
-const INITIAL_CLASS_MEMBERS: Record<string, string[]> = {
-  '7A': ['Andi Wijaya'],
-};
-
 const DEFAULT_WALI_KELAS = 'Ibu Ratna Susanti';
 
 const AcademicManagement: React.FC = () => {
   const [view, setView] = useState<'main' | 'users' | 'classes' | 'class_detail'>('main');
   const [selectedGrade, setSelectedGrade] = useState<number | null>(null);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  // --- DATA UTAMA (STATE, BUKAN LAGI KONSTANTA) ---
-  const [users, setUsers] = useState<UserItem[]>(INITIAL_USERS);
-  const [classMembers, setClassMembers] = useState<Record<string, string[]>>(INITIAL_CLASS_MEMBERS);
+  // --- DATA UTAMA (DIAMBIL DARI DATABASE SUPABASE) ---
+  const [users, setUsers] = useState<UserItem[]>([]);
+  const [classMembers, setClassMembers] = useState<Record<string, string[]>>({});
   const [waliKelasMap, setWaliKelasMap] = useState<Record<string, string>>({});
 
   // --- TONG SAMPAH & KONFIRMASI HAPUS ---
@@ -70,13 +60,42 @@ const AcademicManagement: React.FC = () => {
   const classKey = selectedGrade && selectedClass ? `${selectedGrade}${selectedClass}` : '';
   const currentWaliKelas = waliKelasMap[classKey] || DEFAULT_WALI_KELAS;
 
+  // --- AMBIL DATA DARI SUPABASE SAAT HALAMAN DIBUKA ---
+  useEffect(() => {
+    fetchUsersFromSupabase();
+  }, []);
+
+  const fetchUsersFromSupabase = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('users').select('*');
+      if (error) {
+        console.error('Gagal memuat data pengguna:', error.message);
+      } else if (data) {
+        // Memetakan data dari Supabase ke format UserItem
+        const formattedUsers: UserItem[] = data.map((item: any) => ({
+          id: item.id.toString(),
+          name: item.name,
+          role: item.role,
+          subject: item.subject,
+          class: item.class_name,
+        }));
+        setUsers(formattedUsers);
+      }
+    } catch (err) {
+      console.error('Terjadi kesalahan:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOpenClass = (grade: number, cls: string) => {
     setSelectedGrade(grade);
     setSelectedClass(cls);
     setView('class_detail');
   };
 
-  // --- HAPUS: PINDAHKAN DATA ASLI KE TONG SAMPAH ---
+  // --- HAPUS: PINDAHKAN DATA KE TONG SAMPAH & DATABASE ---
   const requestDeleteUser = (user: UserItem) => {
     setDeleteConfirm({ isOpen: true, label: user.name, origin: { type: 'user', user } });
   };
@@ -85,12 +104,18 @@ const AcademicManagement: React.FC = () => {
     setDeleteConfirm({ isOpen: true, label: `${memberName} (dari kelas)`, origin: { type: 'member', classKey, memberName } });
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteConfirm.isOpen) return;
     const { origin, label } = deleteConfirm;
 
     if (origin.type === 'user') {
-      setUsers(prev => prev.filter(u => u.id !== origin.user.id));
+      // Hapus dari database Supabase
+      const { error } = await supabase.from('users').delete().eq('id', origin.user.id);
+      if (!error) {
+        setUsers(prev => prev.filter(u => u.id !== origin.user.id));
+      } else {
+        alert('Gagal menghapus dari database: ' + error.message);
+      }
     } else {
       setClassMembers(prev => ({
         ...prev,
@@ -110,12 +135,19 @@ const AcademicManagement: React.FC = () => {
   };
 
   // --- PULIHKAN DARI TONG SAMPAH ---
-  const handleRestore = (item: TrashItem) => {
+  const handleRestore = async (item: TrashItem) => {
     if (item.origin.type === 'user') {
-      // Ambil nilainya dulu di sini (masih dalam scope yang sudah dipersempit tipenya),
-      // baru dipakai di dalam callback — supaya TypeScript tidak "lupa" tipe originnya.
       const restoredUser = item.origin.user;
-      setUsers(prev => [restoredUser, ...prev]);
+      // Masukkan kembali ke Supabase
+      const { error } = await supabase.from('users').insert([{
+        name: restoredUser.name,
+        role: restoredUser.role,
+        subject: restoredUser.subject || null,
+        class_name: restoredUser.class || null,
+      }]);
+      if (!error) {
+        fetchUsersFromSupabase();
+      }
     } else {
       const { classKey, memberName } = item.origin;
       setClassMembers(prev => ({
@@ -126,7 +158,7 @@ const AcademicManagement: React.FC = () => {
     setTrashItems(prev => prev.filter(t => t.id !== item.id));
   };
 
-  // --- TAMBAH USER BARU ---
+  // --- TAMBAH USER BARU KE SUPABASE ---
   const openAddUserModal = () => {
     setNewUserName('');
     setNewUserRole('Siswa');
@@ -135,18 +167,25 @@ const AcademicManagement: React.FC = () => {
     setShowAddUserModal(true);
   };
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserName.trim()) return;
 
-    const newUser: UserItem = {
-      id: `u_${Date.now()}`,
+    const payload = {
       name: newUserName.trim(),
       role: newUserRole,
-      ...(newUserRole === 'Guru' ? { subject: newUserSubject || '-' } : { class: newUserClass }),
+      subject: newUserRole === 'Guru' ? (newUserSubject || '-') : null,
+      class_name: newUserRole === 'Siswa' ? newUserClass : null,
     };
-    setUsers(prev => [newUser, ...prev]);
-    setShowAddUserModal(false);
+
+    const { error } = await supabase.from('users').insert([payload]);
+
+    if (error) {
+      alert('Gagal menyimpan data ke database: ' + error.message);
+    } else {
+      setShowAddUserModal(false);
+      fetchUsersFromSupabase(); // Muat ulang data terbaru dari database
+    }
   };
 
   // --- EDIT WALI KELAS ---
@@ -176,33 +215,33 @@ const AcademicManagement: React.FC = () => {
       {/* --- HEADER --- */}
       <div className="mb-6 flex items-center gap-4">
         {view !== 'main' && (
-          <button onClick={() => setView(view === 'class_detail' ? 'classes' : 'main')} className="p-2 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-xl transition-colors">
+          <button onClick={() => setView(view === 'class_detail' ? 'classes' : 'main')} className="p-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-xl transition-colors">
             <ArrowLeft size={20} />
           </button>
         )}
         <div>
-          <h2 className="text-2xl font-bold text-indigo-900">
+          <h2 className="text-2xl font-bold text-emerald-900">
             {view === 'main' ? 'Manajemen Terpadu' :
              view === 'users' ? 'Daftar Murid & Guru' :
              view === 'classes' ? 'Manajemen Ruang Kelas' :
              `Kelas ${selectedGrade}${selectedClass}`}
           </h2>
-          <p className="text-indigo-600 text-sm mt-1">Kelola data keanggotaan dan struktur kelas akademik.</p>
+          <p className="text-emerald-600 text-sm mt-1">Kelola data keanggotaan dan struktur kelas akademik terhubung Supabase.</p>
         </div>
       </div>
 
       {/* --- TAMPILAN 1: MENU UTAMA --- */}
       {view === 'main' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in">
-          <button onClick={() => setView('users')} className="bg-white p-8 rounded-3xl border border-indigo-100 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left group">
+          <button onClick={() => setView('users')} className="bg-white p-8 rounded-3xl border border-emerald-100 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all text-left group">
             <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
               <Users size={32} />
             </div>
             <h3 className="text-2xl font-bold text-slate-800 mb-2">Daftar Murid & Guru</h3>
-            <p className="text-slate-500 text-sm">Tambah, edit, atau hapus profil siswa dan guru pengajar secara manual.</p>
+            <p className="text-slate-500 text-sm">Kelola profil siswa dan guru yang tersimpan di database online.</p>
           </button>
 
-          <button onClick={() => setView('classes')} className="bg-white p-8 rounded-3xl border border-indigo-100 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left group">
+          <button onClick={() => setView('classes')} className="bg-white p-8 rounded-3xl border border-emerald-100 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all text-left group">
             <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
               <BookOpen size={32} />
             </div>
@@ -214,22 +253,27 @@ const AcademicManagement: React.FC = () => {
 
       {/* --- TAMPILAN 2: DAFTAR PENGGUNA --- */}
       {view === 'users' && (
-        <div className="bg-white rounded-3xl shadow-sm border border-indigo-100 overflow-hidden animate-in fade-in">
-          <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50/50">
-            <h3 className="font-bold text-indigo-900">Semua Pengguna</h3>
-            <button onClick={openAddUserModal} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl flex items-center gap-2">
+        <div className="bg-white rounded-3xl shadow-sm border border-emerald-100 overflow-hidden animate-in fade-in">
+          <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-emerald-50/50">
+            <h3 className="font-bold text-emerald-900">Semua Pengguna (Database Online)</h3>
+            <button onClick={openAddUserModal} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl flex items-center gap-2">
               <Plus size={16} /> Tambah Data
             </button>
           </div>
           <div className="divide-y divide-slate-100">
-            {users.length === 0 && <p className="p-6 text-center text-sm text-slate-400">Belum ada data pengguna.</p>}
-            {users.map(u => (
+            {loading && (
+              <div className="p-10 text-center flex items-center justify-center gap-2 text-emerald-600">
+                <Loader2 className="animate-spin" size={20} /> Memuat data dari server...
+              </div>
+            )}
+            {!loading && users.length === 0 && <p className="p-6 text-center text-sm text-slate-400">Belum ada data pengguna di database.</p>}
+            {!loading && users.map(u => (
               <div key={u.id} className="p-4 flex items-center justify-between hover:bg-slate-50">
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">{u.name.charAt(0)}</div>
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold">{u.name.charAt(0)}</div>
                   <div>
                     <p className="font-bold text-slate-800">{u.name}</p>
-                    <p className="text-xs text-slate-500">{u.role} {u.subject ? `• ${u.subject}` : `• Kelas ${u.class}`}</p>
+                    <p className="text-xs text-slate-500">{u.role} {u.subject ? `• ${u.subject}` : u.class ? `• Kelas ${u.class}` : ''}</p>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -246,14 +290,14 @@ const AcademicManagement: React.FC = () => {
       {view === 'classes' && (
         <div className="space-y-8 animate-in fade-in">
           {GRADES.map(grade => (
-            <div key={grade} className="bg-white p-6 rounded-3xl border border-indigo-100 shadow-sm">
-              <h3 className="text-xl font-bold text-indigo-900 mb-4 border-b border-indigo-50 pb-2">Jenjang Kelas {grade}</h3>
+            <div key={grade} className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+              <h3 className="text-xl font-bold text-emerald-900 mb-4 border-b border-emerald-50 pb-2">Jenjang Kelas {grade}</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
                 {CLASSES.map(cls => (
                   <button
                     key={cls}
                     onClick={() => handleOpenClass(grade, cls)}
-                    className="py-4 px-3 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded-2xl font-bold text-lg transition-colors flex justify-between items-center group"
+                    className="py-4 px-3 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white rounded-2xl font-bold text-lg transition-colors flex justify-between items-center group"
                   >
                     <span>{grade}{cls}</span>
                     <ChevronRight size={18} className="opacity-50 group-hover:opacity-100" />
@@ -269,16 +313,16 @@ const AcademicManagement: React.FC = () => {
       {view === 'class_detail' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in">
           <div className="md:col-span-1">
-            <div className="bg-indigo-600 p-6 rounded-3xl text-white shadow-md">
-              <p className="text-indigo-200 text-sm mb-1">Wali Kelas Saat Ini</p>
+            <div className="bg-emerald-600 p-6 rounded-3xl text-white shadow-md">
+              <p className="text-emerald-200 text-sm mb-1">Wali Kelas Saat Ini</p>
               <h3 className="text-xl font-bold mb-4">{currentWaliKelas}</h3>
-              <button onClick={handleEditWaliKelas} className="w-full py-2 bg-white text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50">Edit Wali Kelas</button>
+              <button onClick={handleEditWaliKelas} className="w-full py-2 bg-white text-emerald-700 text-sm font-bold rounded-xl hover:bg-emerald-50">Edit Wali Kelas</button>
             </div>
           </div>
-          <div className="md:col-span-2 bg-white border border-indigo-100 rounded-3xl p-6 shadow-sm">
+          <div className="md:col-span-2 bg-white border border-emerald-100 rounded-3xl p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-slate-800">Daftar Anggota Kelas</h3>
-              <button onClick={() => setShowAddMemberModal(true)} className="text-sm font-bold text-indigo-600 hover:text-indigo-800">+ Tambah Siswa</button>
+              <button onClick={() => setShowAddMemberModal(true)} className="text-sm font-bold text-emerald-600 hover:text-emerald-800">+ Tambah Siswa</button>
             </div>
             <div className="space-y-2">
               {currentMembers.length === 0 && (
@@ -317,7 +361,7 @@ const AcademicManagement: React.FC = () => {
                   <p className="font-semibold text-sm text-slate-800">{item.name}</p>
                   <div className="flex justify-between items-center mt-2">
                     <span className="text-[10px] text-rose-500 font-bold">{item.expireDays} hari tersisa</span>
-                    <button onClick={() => handleRestore(item)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                    <button onClick={() => handleRestore(item)} className="text-xs font-bold text-emerald-600 hover:text-emerald-800 flex items-center gap-1">
                       <RotateCcw size={12} /> Pulihkan
                     </button>
                   </div>
@@ -352,7 +396,7 @@ const AcademicManagement: React.FC = () => {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-lg text-slate-800">Tambah Murid / Guru</h3>
+              <h3 className="font-bold text-lg text-slate-800">Tambah Murid / Guru ke Database</h3>
               <button onClick={() => setShowAddUserModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
             </div>
             <form onSubmit={handleAddUser} className="space-y-3">
@@ -384,7 +428,7 @@ const AcademicManagement: React.FC = () => {
               )}
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setShowAddUserModal(false)} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-xl">Batal</button>
-                <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl">Simpan</button>
+                <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl">Simpan ke Database</button>
               </div>
             </form>
           </div>
@@ -406,7 +450,7 @@ const AcademicManagement: React.FC = () => {
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-xl">Batal</button>
-                <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl">Tambah</button>
+                <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl">Tambah</button>
               </div>
             </form>
           </div>

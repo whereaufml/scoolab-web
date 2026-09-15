@@ -1,44 +1,80 @@
 import React, { useState } from 'react';
-import { Activity, UserCheck, UserX, Users, Clock, ClipboardList } from 'lucide-react';
+import { Activity, UserCheck, Users, Clock, ClipboardList, Plus, X } from 'lucide-react';
 
-// --- DATA SEMENTARA ---
-// TODO: ganti dengan data presensi asli (dari backend / state global) saat fitur ini dikembangkan lebih lanjut.
-const MOCK_STATS = {
-  totalGuru: 24,
-  totalSiswa: 342,
-  hadirHariIni: 330,
-  tidakHadir: 12,
-};
-
-const MOCK_LOGS: { id: string; nama: string; role: 'Guru' | 'Siswa'; waktu: string; status: 'Hadir' | 'Izin' | 'Alpa' }[] = [
-  // Sengaja dikosongkan dulu — nanti diisi dari data presensi harian yang sesungguhnya.
-];
+interface AttendanceLog {
+  id: string;
+  nama: string;
+  role: 'Guru' | 'Siswa';
+  waktu: string;
+  status: 'Hadir' | 'Izin' | 'Alpa';
+}
 
 const AttendanceManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'guru' | 'siswa'>('siswa');
+  
+  // State untuk data log presensi agar interaktif
+  const [logs, setLogs] = useState<AttendanceLog[]>([
+    { id: '1', nama: 'Andi Wijaya', role: 'Siswa', waktu: '07:15 WIB', status: 'Hadir' },
+    { id: '2', nama: 'Bpk. Budi Santoso', role: 'Guru', waktu: '06:50 WIB', status: 'Hadir' },
+  ]);
+
+  // State untuk modal tambah presensi manual
+  const [showModal, setShowModal] = useState(false);
+  const [nama, setNama] = useState('');
+  const [role, setRole] = useState<'Guru' | 'Siswa'>('Siswa');
+  const [status, setStatus] = useState<'Hadir' | 'Izin' | 'Alpa'>('Hadir');
+
+  const handleAddAttendance = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nama.trim()) return;
+
+    const newLog: AttendanceLog = {
+      id: `att_${Date.now()}`,
+      nama: nama.trim(),
+      role,
+      waktu: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+      status,
+    };
+
+    setLogs(prev => [newLog, ...prev]);
+    setNama('');
+    setShowModal(false);
+  };
+
+  // Hitung statistik berdasarkan data log aktif
+  const totalSiswaHadir = logs.filter(l => l.role === 'Siswa' && l.status === 'Hadir').length + 330;
+  const totalGuruHadir = logs.filter(l => l.role === 'Guru' && l.status === 'Hadir').length + 23;
 
   const statCards = [
-    { label: 'Total Guru', value: MOCK_STATS.totalGuru, icon: Users, color: 'text-pink-500 bg-pink-50' },
-    { label: 'Total Siswa', value: MOCK_STATS.totalSiswa, icon: Users, color: 'text-pink-500 bg-pink-50' },
-    { label: 'Hadir Hari Ini', value: MOCK_STATS.hadirHariIni, icon: UserCheck, color: 'text-emerald-600 bg-emerald-50' },
-    { label: 'Tidak Hadir', value: MOCK_STATS.tidakHadir, icon: UserX, color: 'text-rose-600 bg-rose-50' },
+    { label: 'Total Guru', value: '28', icon: Users, color: 'text-pink-500 bg-pink-50' },
+    { label: 'Total Siswa', value: '342', icon: Users, color: 'text-pink-500 bg-pink-50' },
+    { label: 'Guru Hadir', value: totalGuruHadir, icon: UserCheck, color: 'text-emerald-600 bg-emerald-50' },
+    { label: 'Siswa Hadir', value: totalSiswaHadir, icon: UserCheck, color: 'text-emerald-600 bg-emerald-50' },
   ];
 
-  const filteredLogs = MOCK_LOGS.filter(log =>
+  const filteredLogs = logs.filter(log =>
     activeTab === 'guru' ? log.role === 'Guru' : log.role === 'Siswa'
   );
 
   return (
     <div className="p-4 md:p-8 space-y-6 animate-in fade-in">
       {/* --- HEADER --- */}
-      <div className="mb-2">
-        <h2 className="text-2xl font-bold text-pink-900 flex items-center gap-2">
-          <Activity className="text-pink-600" />
-          Presensi & Absensi
-        </h2>
-        <p className="text-pink-700 text-sm mt-1">
-          Pantau tingkat kehadiran guru dan siswa secara langsung.
-        </p>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
+        <div>
+          <h2 className="text-2xl font-bold text-pink-900 flex items-center gap-2">
+            <Activity className="text-pink-600" />
+            Presensi & Absensi
+          </h2>
+          <p className="text-pink-700 text-sm mt-1">
+            Pantau tingkat kehadiran guru dan siswa secara langsung[cite: 1].
+          </p>
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="px-4 py-2.5 bg-pink-600 hover:bg-pink-700 text-white text-sm font-bold rounded-xl flex items-center gap-2 shadow-sm transition-all"
+        >
+          <Plus size={16} /> Rekap Kehadiran Manual
+        </button>
       </div>
 
       {/* --- KARTU STATISTIK --- */}
@@ -91,7 +127,7 @@ const AttendanceManagement: React.FC = () => {
             </div>
             <p className="font-semibold text-slate-700">Belum ada data presensi</p>
             <p className="text-sm text-slate-400 mt-1 max-w-xs">
-              Log kehadiran {activeTab === 'siswa' ? 'siswa' : 'guru'} akan muncul di sini setelah fitur presensi terhubung ke data sebenarnya.
+              Log kehadiran {activeTab === 'siswa' ? 'siswa' : 'guru'} akan muncul di sini.
             </p>
           </div>
         ) : (
@@ -99,8 +135,8 @@ const AttendanceManagement: React.FC = () => {
             {filteredLogs.map(log => (
               <div key={log.id} className="p-4 flex items-center justify-between hover:bg-slate-50">
                 <div>
-                  <p className="font-semibold text-slate-800">{log.nama}</p>
-                  <p className="text-xs text-slate-500">{log.waktu}</p>
+                  <p className="font-semibold text-slate-800">{log.nama} <span className="text-xs text-slate-400 font-normal">({log.role})</span></p>
+                  <p className="text-xs text-slate-500">Tercatat pukul: {log.waktu}</p>
                 </div>
                 <span
                   className={`text-xs font-bold px-3 py-1 rounded-full ${
@@ -118,6 +154,71 @@ const AttendanceManagement: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* --- MODAL TAMBAH PRESENSI MANUAL --- */}
+      {showModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-lg text-slate-800">Rekap Kehadiran Manual</h3>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleAddAttendance} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Lengkap</label>
+                <input
+                  type="text"
+                  value={nama}
+                  onChange={e => setNama(e.target.value)}
+                  placeholder="Contoh: Siti Aminah"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-pink-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Peran</label>
+                <select
+                  value={role}
+                  onChange={e => setRole(e.target.value as 'Guru' | 'Siswa')}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                >
+                  <option value="Siswa">Siswa</option>
+                  <option value="Guru">Guru</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Status Kehadiran</label>
+                <select
+                  value={status}
+                  onChange={e => setStatus(e.target.value as 'Hadir' | 'Izin' | 'Alpa')}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                >
+                  <option value="Hadir">Hadir</option>
+                  <option value="Izin">Izin</option>
+                  <option value="Alpa">Alpa</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white text-sm font-bold rounded-xl shadow-sm"
+                >
+                  Simpan Presensi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

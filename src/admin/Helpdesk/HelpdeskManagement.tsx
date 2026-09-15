@@ -15,7 +15,7 @@ interface Thread {
   messages: ThreadMessage[];
 }
 
-// Struktur Data Tiruan untuk Helpdesk
+// --- DATA SEMENTARA ---
 const INITIAL_THREADS: Thread[] = [
   {
     id: 't1',
@@ -59,8 +59,7 @@ const HelpdeskManagement: React.FC = () => {
     setExpandedMessageId(expandedMessageId === msgId ? null : msgId);
   };
 
-  // Fungsi mengirim balasan Admin — bisa dipakai kapan saja, termasuk tiket yang sudah "selesai",
-  // supaya admin tetap bisa menindaklanjuti kalau siswa butuh klarifikasi tambahan.
+  // Fungsi mengirim balasan Admin
   const handleSendReply = (threadId: string) => {
     if (!replyText.trim()) return;
 
@@ -75,7 +74,7 @@ const HelpdeskManagement: React.FC = () => {
               {
                 id: `reply-${Date.now()}`,
                 isAdmin: true,
-                text: replyText,
+                text: replyText.trim(),
               }
             ]
           };
@@ -87,31 +86,35 @@ const HelpdeskManagement: React.FC = () => {
     setReplyingThreadId(null);
   };
 
+  const waitingCount = threads.filter(t => t.status === 'menunggu').length;
+
   return (
-    <div className="p-4 md:p-8 space-y-6 bg-slate-50 min-h-screen">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="p-4 md:p-8 space-y-6 bg-slate-50 min-h-screen animate-in fade-in">
+      {/* --- HEADER --- */}
+      <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-orange-900 flex items-center gap-2">
             <MessageSquare className="text-orange-600" />
             Helpdesk Siswa
           </h2>
           <p className="text-orange-700 text-sm mt-1">
-            Bantu selesaikan kendala teknis dan pertanyaan dari siswa.
+            Bantu selesaikan kendala teknis dan pertanyaan dari siswa[cite: 7].
           </p>
         </div>
-        <div className="bg-orange-100 text-orange-800 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2">
+        <div className="bg-orange-100 text-orange-800 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm">
           <ShieldAlert size={18} />
-          {threads.filter(t => t.status === 'menunggu').length} Pesan Menunggu
+          {waitingCount} Pesan Menunggu
         </div>
       </div>
 
+      {/* --- DAFTAR TIKET / CHAT --- */}
       {threads.length === 0 ? (
         <div className="bg-white rounded-3xl shadow-sm border border-orange-200 p-12 flex flex-col items-center text-center">
           <div className="w-14 h-14 bg-orange-50 text-orange-400 rounded-2xl flex items-center justify-center mb-3">
             <Inbox size={28} />
           </div>
           <p className="font-semibold text-slate-700">Belum ada tiket masuk</p>
-          <p className="text-sm text-slate-400 mt-1">Pesan keluhan dari siswa akan muncul di sini.</p>
+          <p className="text-sm text-slate-400 mt-1">Pesan keluhan dari siswa akan muncul di sini[cite: 9].</p>
         </div>
       ) : (
         <div className="bg-white rounded-3xl shadow-sm border border-orange-200 overflow-hidden">
@@ -124,9 +127,13 @@ const HelpdeskManagement: React.FC = () => {
                   <User size={18} className="text-orange-500" />
                   {thread.studentName}
                 </div>
-                {thread.status === 'selesai' && (
+                {thread.status === 'selesai' ? (
                   <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
                     <CheckCircle2 size={14} /> Selesai
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-full border border-orange-200">
+                    Menunggu Respon
                   </span>
                 )}
               </div>
@@ -150,7 +157,7 @@ const HelpdeskManagement: React.FC = () => {
                           {msg.text}
                         </p>
                         {!msg.isAdmin && (
-                          <p className="text-[10px] text-amber-500 mt-2 font-semibold">
+                          <p className="text-[10px] text-orange-500 mt-2 font-semibold">
                             {isExpanded ? 'Tutup teks' : 'Klik untuk melihat selengkapnya / membalas'}
                           </p>
                         )}
@@ -160,7 +167,7 @@ const HelpdeskManagement: React.FC = () => {
                 })}
               </div>
 
-              {/* Tombol Buka Kolom Balasan — tersedia untuk tiket "menunggu" maupun "selesai" */}
+              {/* Tombol Buka Kolom Balasan */}
               {replyingThreadId !== thread.id && (
                 <div className="mt-4 flex justify-end">
                   <button
@@ -191,7 +198,7 @@ const HelpdeskManagement: React.FC = () => {
                     </button>
                     <button
                       onClick={() => { setReplyingThreadId(null); setReplyText(''); }}
-                      className="text-xs font-semibold text-slate-400 hover:text-slate-600"
+                      className="text-xs font-semibold text-slate-400 hover:text-slate-600 text-center"
                     >
                       Batal
                     </button>

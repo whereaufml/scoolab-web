@@ -1,11 +1,30 @@
 import React, { useState } from 'react';
 import { 
   BookOpen, Users, ArrowLeft, Trash2, Plus, Edit3, 
-  UserX, AlertTriangle, ChevronRight
+  UserX, AlertTriangle, ChevronRight, RotateCcw, X
 } from 'lucide-react';
 
-// Data Tiruan
-const MOCK_USERS = [
+// --- TIPE DATA ---
+interface UserItem {
+  id: string;
+  name: string;
+  role: 'Guru' | 'Siswa';
+  subject?: string;
+  class?: string;
+}
+
+interface TrashItem {
+  id: string;
+  name: string;
+  deletedAt: string;
+  expireDays: number;
+  origin:
+    | { type: 'user'; user: UserItem }
+    | { type: 'member'; classKey: string; memberName: string };
+}
+
+// --- DATA SEMENTARA ---
+const INITIAL_USERS: UserItem[] = [
   { id: 'u1', name: 'Bpk. Budi Santoso', role: 'Guru', subject: 'Matematika' },
   { id: 'u2', name: 'Andi Wijaya', role: 'Siswa', class: '7A' },
 ];
@@ -13,17 +32,39 @@ const MOCK_USERS = [
 const GRADES = [7, 8, 9];
 const CLASSES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
 
-const AcademicManagement: React.FC = () => {
+const OperationalManagement: React.FC = () => {
   const [view, setView] = useState<'main' | 'users' | 'classes' | 'class_detail'>('main');
   const [selectedGrade, setSelectedGrade] = useState<number | null>(null);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   
-  // State untuk Tong Sampah & Konfirmasi
+  // --- STATE UTAMA ---
+  const [users, setUsers] = useState<UserItem[]>(INITIAL_USERS);
+  const [classMembers, setClassMembers] = useState<Record<string, string[]>>({
+    '7A': ['Andi Wijaya']
+  });
+  const [waliKelasMap, setWaliKelasMap] = useState<Record<string, string>>({});
+
+  // --- TONG SAMPAH & KONFIRMASI ---
   const [showTrash, setShowTrash] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{isOpen: boolean, target: string | null}>({isOpen: false, target: null});
-  const [trashItems, setTrashItems] = useState([
-    { id: 't1', name: 'Siti Aminah (Siswa)', deletedAt: '12 Sep 2026', expireDays: 28 }
-  ]);
+  const [trashItems, setTrashItems] = useState<TrashItem[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<
+    { isOpen: false } | { isOpen: true; label: string; origin: TrashItem['origin'] }
+  >({ isOpen: false });
+
+  // --- MODAL TAMBAH USER ---
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'Guru' | 'Siswa'>('Siswa');
+  const [newUserSubject, setNewUserSubject] = useState('');
+  const [newUserClass, setNewUserClass] = useState('7A');
+
+  // --- MODAL TAMBAH SISWA KE KELAS ---
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [newMemberName, setNewMemberName] = useState('');
+
+  const classKey = selectedGrade && selectedClass ? `${selectedGrade}${selectedClass}` : '';
+  const currentWaliKelas = waliKelasMap[classKey] || 'Ibu Ratna Susanti';
+  const currentMembers = classMembers[classKey] || [];
 
   const handleOpenClass = (grade: number, cls: string) => {
     setSelectedGrade(grade);
@@ -31,12 +72,100 @@ const AcademicManagement: React.FC = () => {
     setView('class_detail');
   };
 
+  // --- HAPUS & PINDAHKAN KE TONG SAMPAH ---
+  const requestDeleteUser = (user: UserItem) => {
+    setDeleteConfirm({ isOpen: true, label: user.name, origin: { type: 'user', user } });
+  };
+
+  const requestDeleteMember = (memberName: string) => {
+    setDeleteConfirm({ isOpen: true, label: `${memberName} (dari kelas)`, origin: { type: 'member', classKey, memberName } });
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deleteConfirm.isOpen) return;
+    const { origin, label } = deleteConfirm;
+
+    if (origin.type === 'user') {
+      setUsers(prev => prev.filter(u => u.id !== origin.user.id));
+    } else {
+      setClassMembers(prev => ({
+        ...prev,
+        [origin.classKey]: (prev[origin.classKey] || []).filter(m => m !== origin.memberName),
+      }));
+    }
+
+    const newTrashItem: TrashItem = {
+      id: `t_${Date.now()}`,
+      name: label,
+      deletedAt: 'Hari ini',
+      expireDays: 30,
+      origin,
+    };
+    setTrashItems(prev => [newTrashItem, ...prev]);
+    setDeleteConfirm({ isOpen: false });
+  };
+
+  // --- PULIHKAN DARI TONG SAMPAH ---
+  const handleRestore = (item: TrashItem) => {
+    if (item.origin.type === 'user') {
+      // Menegaskan tipe data secara eksplisit agar TypeScript tidak bingung
+      const restoredUser = (item.origin as { type: 'user'; user: UserItem }).user;
+      setUsers(prev => [restoredUser, ...prev]);
+    } else {
+      const { classKey, memberName } = item.origin as { type: 'member'; classKey: string; memberName: string };
+      setClassMembers(prev => ({
+        ...prev,
+        [classKey]: [memberName, ...(prev[classKey] || [])],
+      }));
+    }
+    setTrashItems(prev => prev.filter(t => t.id !== item.id));
+  };
+
+  // --- TAMBAH USER BARU ---
+  const handleAddUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserName.trim()) return;
+
+    const newUser: UserItem = {
+      id: `u_${Date.now()}`,
+      name: newUserName.trim(),
+      role: newUserRole,
+      ...(newUserRole === 'Guru' ? { subject: newUserSubject || '-' } : { class: newUserClass }),
+    };
+
+    setUsers(prev => [newUser, ...prev]);
+    setShowAddUserModal(false);
+    setNewUserName('');
+    setNewUserSubject('');
+  };
+
+  // --- TAMBAH SISWA KE KELAS ---
+  const handleAddMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMemberName.trim()) return;
+
+    setClassMembers(prev => ({
+      ...prev,
+      [classKey]: [...(prev[classKey] || []), newMemberName.trim()],
+    }));
+    setNewMemberName('');
+    setShowAddMemberModal(false);
+  };
+
+  // --- EDIT WALI KELAS ---
+  const handleEditWaliKelas = () => {
+    const input = window.prompt('Masukkan nama wali kelas baru:', currentWaliKelas);
+    if (input && input.trim()) {
+      setWaliKelasMap(prev => ({ ...prev, [classKey]: input.trim() }));
+    }
+  };
+
   return (
     <div className="p-4 md:p-8 space-y-6 relative min-h-[80vh]">
       {/* Header Halaman */}
       <div className="mb-6 flex items-center gap-4">
         {view !== 'main' && (
-          <button onClick={() => setView('main')} className="p-2 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-xl transition-colors">
+          <button onClick={() => setView(view === 'class_detail' ? 'classes' : 'main')} className="p-2 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-xl transition-colors">
             <ArrowLeft size={20} />
           </button>
         )}
@@ -53,7 +182,7 @@ const AcademicManagement: React.FC = () => {
 
       {/* --- TAMPILAN 1: MENU UTAMA (2 KOTAK) --- */}
       {view === 'main' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in">
           <button onClick={() => setView('users')} className="bg-white p-8 rounded-3xl border border-indigo-100 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left group">
             <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
               <Users size={32} />
@@ -77,12 +206,13 @@ const AcademicManagement: React.FC = () => {
         <div className="bg-white rounded-3xl shadow-sm border border-indigo-100 overflow-hidden animate-in fade-in">
           <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50/50">
             <h3 className="font-bold text-indigo-900">Semua Pengguna</h3>
-            <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl flex items-center gap-2">
+            <button onClick={() => setShowAddUserModal(true)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl flex items-center gap-2">
               <Plus size={16} /> Tambah Data
             </button>
           </div>
           <div className="divide-y divide-slate-100">
-            {MOCK_USERS.map(u => (
+            {users.length === 0 && <p className="p-6 text-center text-sm text-slate-400">Belum ada data pengguna.</p>}
+            {users.map(u => (
               <div key={u.id} className="p-4 flex items-center justify-between hover:bg-slate-50">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">{u.name.charAt(0)}</div>
@@ -93,7 +223,7 @@ const AcademicManagement: React.FC = () => {
                 </div>
                 <div className="flex gap-2">
                   <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit3 size={18} /></button>
-                  <button onClick={() => setDeleteConfirm({isOpen: true, target: u.name})} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
+                  <button onClick={() => requestDeleteUser(u)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
                 </div>
               </div>
             ))}
@@ -130,20 +260,23 @@ const AcademicManagement: React.FC = () => {
           <div className="md:col-span-1">
             <div className="bg-indigo-600 p-6 rounded-3xl text-white shadow-md">
               <p className="text-indigo-200 text-sm mb-1">Wali Kelas Saat Ini</p>
-              <h3 className="text-xl font-bold mb-4">Ibu Ratna Susanti</h3>
-              <button className="w-full py-2 bg-white text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50">Edit Wali Kelas</button>
+              <h3 className="text-xl font-bold mb-4">{currentWaliKelas}</h3>
+              <button onClick={handleEditWaliKelas} className="w-full py-2 bg-white text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50">Edit Wali Kelas</button>
             </div>
           </div>
           <div className="md:col-span-2 bg-white border border-indigo-100 rounded-3xl p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-slate-800">Daftar Anggota Kelas</h3>
-              <button className="text-sm font-bold text-indigo-600 hover:text-indigo-800">+ Tambah Siswa</button>
+              <button onClick={() => setShowAddMemberModal(true)} className="text-sm font-bold text-indigo-600 hover:text-indigo-800">+ Tambah Siswa</button>
             </div>
             <div className="space-y-2">
-              <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="font-semibold text-slate-700">1. Andi Wijaya</span>
-                <button onClick={() => setDeleteConfirm({isOpen: true, target: 'Andi Wijaya (dari kelas)'})} className="text-red-500 hover:text-red-700 p-1"><UserX size={16} /></button>
-              </div>
+              {currentMembers.length === 0 && <p className="text-sm text-slate-400 text-center py-4">Belum ada siswa di kelas ini.</p>}
+              {currentMembers.map((member, idx) => (
+                <div key={member} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="font-semibold text-slate-700">{idx + 1}. {member}</span>
+                  <button onClick={() => requestDeleteMember(member)} className="text-red-500 hover:text-red-700 p-1"><UserX size={16} /></button>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -166,12 +299,15 @@ const AcademicManagement: React.FC = () => {
             <h4 className="font-bold text-slate-800 mb-1">Barang Dihapus</h4>
             <p className="text-xs text-slate-500 mb-4">Akan dihapus permanen dalam 30 hari.</p>
             <div className="space-y-3 max-h-60 overflow-y-auto">
+              {trashItems.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Tong sampah kosong.</p>}
               {trashItems.map(item => (
                 <div key={item.id} className="p-3 bg-rose-50 border border-rose-100 rounded-xl">
                   <p className="font-semibold text-sm text-slate-800">{item.name}</p>
                   <div className="flex justify-between items-center mt-2">
                     <span className="text-[10px] text-rose-500 font-bold">{item.expireDays} hari tersisa</span>
-                    <button className="text-xs font-bold text-indigo-600 hover:text-indigo-800">Pulihkan</button>
+                    <button onClick={() => handleRestore(item)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                      <RotateCcw size={12} /> Pulihkan
+                    </button>
                   </div>
                 </div>
               ))}
@@ -189,12 +325,78 @@ const AcademicManagement: React.FC = () => {
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Hapus Data?</h3>
             <p className="text-sm text-slate-600 mb-6">
-              Apakah kamu yakin ingin menghapus <strong>{deleteConfirm.target}</strong>? Data akan dipindahkan ke Tong Sampah selama 30 hari sebelum dihapus permanen.
+              Apakah kamu yakin ingin menghapus <strong>{deleteConfirm.label}</strong>? Data akan dipindahkan ke Tong Sampah.
             </p>
             <div className="flex gap-3">
-              <button onClick={() => setDeleteConfirm({isOpen: false, target: null})} className="flex-1 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200">Batal</button>
-              <button onClick={() => setDeleteConfirm({isOpen: false, target: null})} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700">Ya, Hapus</button>
+              <button onClick={() => setDeleteConfirm({ isOpen: false })} className="flex-1 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200">Batal</button>
+              <button onClick={handleConfirmDelete} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700">Ya, Hapus</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL TAMBAH USER --- */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-lg text-slate-800">Tambah Murid / Guru Baru</h3>
+              <button onClick={() => setShowAddUserModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleAddUser} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Lengkap</label>
+                <input value={newUserName} onChange={e => setNewUserName(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" required />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Peran</label>
+                <select value={newUserRole} onChange={e => setNewUserRole(e.target.value as 'Guru' | 'Siswa')} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                  <option value="Siswa">Siswa</option>
+                  <option value="Guru">Guru</option>
+                </select>
+              </div>
+              {newUserRole === 'Guru' ? (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Mata Pelajaran</label>
+                  <input value={newUserSubject} onChange={e => setNewUserSubject(e.target.value)} placeholder="Matematika" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Kelas</label>
+                  <select value={newUserClass} onChange={e => setNewUserClass(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                    {GRADES.flatMap(g => CLASSES.map(c => `${g}${c}`)).map(k => (
+                      <option key={k} value={k}>{k}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddUserModal(false)} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-xl">Batal</button>
+                <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl">Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL TAMBAH SISWA KE KELAS --- */}
+      {showAddMemberModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-lg text-slate-800">Tambah Siswa ke Kelas {selectedGrade}{selectedClass}</h3>
+              <button onClick={() => setShowAddMemberModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleAddMember} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Siswa</label>
+                <input value={newMemberName} onChange={e => setNewMemberName(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" required />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-xl">Batal</button>
+                <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl">Tambah</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -203,4 +405,4 @@ const AcademicManagement: React.FC = () => {
   );
 };
 
-export default AcademicManagement;
+export default OperationalManagement;

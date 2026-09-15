@@ -26,7 +26,6 @@ interface ScheduleManagementProps {
   setEvents: React.Dispatch<React.SetStateAction<EventItem[]>>;
 }
 
-// Jenjang & kelas ini disamakan dengan AcademicManagement.tsx supaya konsisten satu sekolah
 const GRADES = [7, 8, 9];
 const CLASSES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
 const ALL_CLASS_OPTIONS = GRADES.flatMap(g => CLASSES.map(c => `Kelas ${g}${c}`));
@@ -51,7 +50,10 @@ const ScheduleManagement: React.FC<ScheduleManagementProps> = ({ schedules, setS
 
   const handleAddSchedule = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTime || !newSubject || !newTeacher) return alert('Semua kolom wajib diisi!');
+    if (!newTime || !newSubject || !newTeacher) {
+      alert('Semua kolom wajib diisi!');
+      return;
+    }
 
     const newItem: ScheduleItem = {
       id: `sch_${Date.now()}`,
@@ -64,12 +66,17 @@ const ScheduleManagement: React.FC<ScheduleManagementProps> = ({ schedules, setS
 
     setSchedules(prev => [...prev, newItem]);
     setShowScheduleModal(false);
-    setNewTime(''); setNewSubject(''); setNewTeacher('');
+    setNewTime(''); 
+    setNewSubject(''); 
+    setNewTeacher('');
   };
 
   const handleAddEvent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEventDate || !newEventTitle || !newEventDesc) return alert('Semua kolom wajib diisi!');
+    if (!newEventDate || !newEventTitle || !newEventDesc) {
+      alert('Semua kolom wajib diisi!');
+      return;
+    }
 
     const newEv: EventItem = {
       id: `ev_${Date.now()}`,
@@ -81,11 +88,14 @@ const ScheduleManagement: React.FC<ScheduleManagementProps> = ({ schedules, setS
 
     setEvents(prev => [...prev, newEv]);
     setShowEventModal(false);
-    setNewEventDate(''); setNewEventTitle(''); setNewEventDesc('');
+    setNewEventDate(''); 
+    setNewEventTitle(''); 
+    setNewEventDesc('');
   };
 
   return (
     <div className="p-4 md:p-8 space-y-6 animate-in fade-in">
+      {/* Header Utama */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl border border-indigo-100 shadow-sm">
         <div>
           <h2 className="text-2xl font-bold text-indigo-900 flex items-center gap-2">
@@ -95,16 +105,34 @@ const ScheduleManagement: React.FC<ScheduleManagementProps> = ({ schedules, setS
           <p className="text-slate-500 text-sm mt-1">Atur jadwal pelajaran harian guru dan siarkan pengumuman event.</p>
         </div>
         <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-          <button onClick={() => setActiveTab('jadwal')} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'jadwal' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600'}`}>Jadwal Mengajar</button>
-          <button onClick={() => setActiveTab('event')} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'event' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600'}`}>Event & Pengumuman</button>
+          <button 
+            onClick={() => setActiveTab('jadwal')} 
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'jadwal' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600'}`}
+          >
+            Jadwal Mengajar
+          </button>
+          <button 
+            onClick={() => setActiveTab('event')} 
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'event' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600'}`}
+          >
+            Event & Pengumuman
+          </button>
         </div>
       </div>
 
+      {/* Tab 1: Jadwal Mengajar */}
       {activeTab === 'jadwal' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Clock size={20} className="text-indigo-600" /> Daftar Jadwal Harian</h3>
-            <button onClick={() => setShowScheduleModal(true)} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl flex items-center gap-2 shadow-sm"><Plus size={16} /> Tambah Jadwal Baru</button>
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Clock size={20} className="text-indigo-600" /> Daftar Jadwal Harian
+            </h3>
+            <button 
+              onClick={() => setShowScheduleModal(true)} 
+              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl flex items-center gap-2 shadow-sm transition-colors"
+            >
+              <Plus size={16} /> Tambah Jadwal Baru
+            </button>
           </div>
 
           {schedules.length === 0 ? (
@@ -124,7 +152,12 @@ const ScheduleManagement: React.FC<ScheduleManagementProps> = ({ schedules, setS
                     <h4 className="font-bold text-slate-800 text-lg mt-2">{sch.subject} ({sch.targetClass})</h4>
                     <p className="text-xs text-slate-500 font-medium">Pengajar: <span className="text-indigo-600 font-bold">{sch.teacher}</span></p>
                   </div>
-                  <button onClick={() => setSchedules(prev => prev.filter(s => s.id !== sch.id))} className="p-2 text-slate-400 hover:text-red-600 rounded-xl"><Trash2 size={18} /></button>
+                  <button 
+                    onClick={() => setSchedules(prev => prev.filter(s => s.id !== sch.id))} 
+                    className="p-2 text-slate-400 hover:text-red-600 rounded-xl transition-colors"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -132,11 +165,19 @@ const ScheduleManagement: React.FC<ScheduleManagementProps> = ({ schedules, setS
         </div>
       )}
 
+      {/* Tab 2: Event & Pengumuman */}
       {activeTab === 'event' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Megaphone size={20} className="text-indigo-600" /> Siaran Pengumuman & Event</h3>
-            <button onClick={() => setShowEventModal(true)} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl flex items-center gap-2 shadow-sm"><Plus size={16} /> Buat Pengumuman Baru</button>
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Megaphone size={20} className="text-indigo-600" /> Siaran Pengumuman & Event
+            </h3>
+            <button 
+              onClick={() => setShowEventModal(true)} 
+              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl flex items-center gap-2 shadow-sm transition-colors"
+            >
+              <Plus size={16} /> Buat Pengumuman Baru
+            </button>
           </div>
 
           {events.length === 0 ? (
@@ -159,7 +200,12 @@ const ScheduleManagement: React.FC<ScheduleManagementProps> = ({ schedules, setS
                     <h4 className="font-bold text-slate-800 text-lg mt-1">{ev.title}</h4>
                     <p className="text-xs text-slate-600">{ev.description}</p>
                   </div>
-                  <button onClick={() => setEvents(prev => prev.filter(e => e.id !== ev.id))} className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl">Hapus</button>
+                  <button 
+                    onClick={() => setEvents(prev => prev.filter(e => e.id !== ev.id))} 
+                    className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition-colors"
+                  >
+                    Hapus
+                  </button>
                 </div>
               ))}
             </div>
@@ -179,7 +225,11 @@ const ScheduleManagement: React.FC<ScheduleManagementProps> = ({ schedules, setS
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Hari</label>
                 <select value={newDay} onChange={e => setNewDay(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm">
-                  <option value="Senin">Senin</option><option value="Selasa">Selasa</option><option value="Rabu">Rabu</option><option value="Kamis">Kamis</option><option value="Jumat">Jumat</option>
+                  <option value="Senin">Senin</option>
+                  <option value="Selasa">Selasa</option>
+                  <option value="Rabu">Rabu</option>
+                  <option value="Kamis">Kamis</option>
+                  <option value="Jumat">Jumat</option>
                 </select>
               </div>
               <div>
