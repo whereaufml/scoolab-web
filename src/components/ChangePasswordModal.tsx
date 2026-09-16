@@ -1,11 +1,12 @@
 import { useState, useEffect, memo } from 'react';
-import { Lock, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Lock, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
 const ChangePasswordModal = memo(({ isOpen, onClose, onSave }: any) => {
   const [oldPass, setOldPass] = useState(''); 
   const [newPass, setNewPass] = useState('');
   const [error, setError] = useState(''); 
   const [success, setSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => { 
     if (isOpen) { 
@@ -13,17 +14,39 @@ const ChangePasswordModal = memo(({ isOpen, onClose, onSave }: any) => {
       setNewPass(''); 
       setError(''); 
       setSuccess(false); 
+      setIsSubmitting(false);
     } 
   }, [isOpen]);
 
   if (!isOpen) return null;
   
-  const handleSubmit = (e: any) => {
+  // onSave sekarang bisa berupa panggilan ke Supabase (async, butuh waktu lewat jaringan),
+  // bukan lagi pengecekan instan ke localStorage. Modal ini dibuat mendukung keduanya:
+  // kalau onSave mengembalikan Promise, ditunggu dulu; kalau langsung mengembalikan
+  // string/null seperti versi lama, tetap jalan juga.
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
+    if (isSubmitting) return; // cegah klik ganda saat request masih berjalan
+    setError('');
+
     if (!oldPass || !newPass) return setError('Semua kolom wajib diisi');
-    if (newPass.length < 4) return setError('Sandi baru minimal 4 karakter');
-    const err = onSave(oldPass, newPass);
-    if (err) setError(err); else { setSuccess(true); setTimeout(() => onClose(), 1500); }
+    if (newPass.length < 6) return setError('Sandi baru minimal 6 karakter');
+
+    setIsSubmitting(true);
+    try {
+      const err = await Promise.resolve(onSave(oldPass, newPass));
+      if (err) {
+        setError(err);
+      } else {
+        setSuccess(true);
+        setTimeout(() => onClose(), 1500);
+      }
+    } catch (caughtErr: any) {
+      // Jaga-jaga kalau onSave throw error (misal koneksi Supabase gagal total)
+      setError(caughtErr?.message || 'Gagal menyimpan sandi. Coba lagi.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -43,12 +66,14 @@ const ChangePasswordModal = memo(({ isOpen, onClose, onSave }: any) => {
           <form onSubmit={handleSubmit} className="p-5">
             {error && <div className="mb-4 p-3 bg-red-50 text-red-700 text-xs rounded-xl flex items-center gap-2 border border-red-100"><AlertCircle size={16} />{error}</div>}
             <div className="space-y-4">
-              <div><label className="block text-xs font-semibold text-slate-700 mb-1.5">Sandi Lama</label><input type="password" value={oldPass} onChange={e => setOldPass(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Masukkan sandi saat ini" /></div>
-              <div><label className="block text-xs font-semibold text-slate-700 mb-1.5">Sandi Baru</label><input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Buat sandi baru (min 4 karakter)" /></div>
+              <div><label className="block text-xs font-semibold text-slate-700 mb-1.5">Sandi Lama</label><input type="password" value={oldPass} onChange={e => setOldPass(e.target.value)} disabled={isSubmitting} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm disabled:opacity-50" placeholder="Masukkan sandi saat ini" /></div>
+              <div><label className="block text-xs font-semibold text-slate-700 mb-1.5">Sandi Baru</label><input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} disabled={isSubmitting} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm disabled:opacity-50" placeholder="Buat sandi baru (min 6 karakter)" /></div>
             </div>
             <div className="mt-6 flex justify-end gap-2">
-              <button type="button" onClick={onClose} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-xl">Batal</button>
-              <button type="submit" className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl">Simpan Sandi</button>
+              <button type="button" onClick={onClose} disabled={isSubmitting} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-xl disabled:opacity-50">Batal</button>
+              <button type="submit" disabled={isSubmitting} className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50 flex items-center gap-2">
+                {isSubmitting ? (<><Loader2 size={16} className="animate-spin" /> Menyimpan...</>) : 'Simpan Sandi'}
+              </button>
             </div>
           </form>
         )}

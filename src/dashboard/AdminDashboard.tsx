@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users, Activity, BookOpen, Calendar, HelpCircle,
-  LayoutDashboard, Menu, X
+  LayoutDashboard, Menu, X, Loader2
 } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
 // Path ini mengikuti struktur folder project kamu:
 // AdminDashboard.tsx ada di src/dashboard, sedangkan tiap fitur admin
@@ -27,6 +28,55 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout, schedul
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // --- STATISTIK RINGKASAN, DIAMBIL LANGSUNG DARI SUPABASE (bukan angka hardcode lagi) ---
+  const [metrics, setMetrics] = useState<{ totalSiswa: number; siswaHadirHariIni: number; kelasAktif: number } | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(true);
+  const [metricsError, setMetricsError] = useState('');
+
+  useEffect(() => {
+    if (activeMenu !== 'dashboard') return; // hanya fetch saat halaman ringkasan sedang dilihat
+    let isCancelled = false;
+
+    const fetchMetrics = async () => {
+      setMetricsLoading(true);
+      setMetricsError('');
+      try {
+        const todayISO = new Date().toISOString().slice(0, 10);
+
+        const [siswaRes, hadirRes, kelasRes] = await Promise.all([
+          supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'siswa').eq('is_deleted', false),
+          supabase.from('attendance_logs').select('id, profiles!inner(role)', { count: 'exact', head: true }).eq('tanggal', todayISO).eq('status', 'Hadir').eq('profiles.role', 'siswa'),
+          supabase.from('classes').select('id', { count: 'exact', head: true }).eq('is_archived', false),
+        ]);
+
+        if (isCancelled) return;
+
+        if (siswaRes.error || hadirRes.error || kelasRes.error) {
+          console.error(siswaRes.error || hadirRes.error || kelasRes.error);
+          setMetricsError('Gagal memuat sebagian statistik.');
+        }
+
+        setMetrics({
+          totalSiswa: siswaRes.count ?? 0,
+          siswaHadirHariIni: hadirRes.count ?? 0,
+          kelasAktif: kelasRes.count ?? 0,
+        });
+      } catch (err) {
+        if (!isCancelled) {
+          console.error(err);
+          setMetricsError('Gagal memuat statistik dashboard.');
+        }
+      } finally {
+        if (!isCancelled) setMetricsLoading(false);
+      }
+    };
+
+    fetchMetrics();
+    return () => { isCancelled = true; };
+  }, [activeMenu]);
+
+  const displayName = user?.name || 'Admin';
+
   // Daftar 5 Fitur Utama beserta Tema Warnanya
   const menuItems = [
     { id: 'dashboard', label: 'Dasbor Utama', icon: LayoutDashboard, baseColor: 'text-slate-500', activeColor: 'bg-slate-100 text-slate-800 border-l-4 border-slate-500' },
@@ -38,9 +88,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout, schedul
   ];
 
   const metricCards = [
-    { title: 'Total Siswa Aktif', count: '342', icon: Users, color: 'text-blue-500' },
-    { title: 'Siswa Hadir Hari Ini', count: '330', icon: Activity, color: 'text-pink-500' },
-    { title: 'Kelas Aktif', count: '12', icon: BookOpen, color: 'text-emerald-500' },
+    { title: 'Total Siswa Aktif', count: metrics ? String(metrics.totalSiswa) : '...', icon: Users, color: 'text-blue-500' },
+    { title: 'Siswa Hadir Hari Ini', count: metrics ? String(metrics.siswaHadirHariIni) : '...', icon: Activity, color: 'text-pink-500' },
+    { title: 'Kelas Aktif', count: metrics ? String(metrics.kelasAktif) : '...', icon: BookOpen, color: 'text-emerald-500' },
   ];
 
   return (
@@ -109,7 +159,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout, schedul
               })}
             </nav>
             <div className="p-4 border-t border-slate-100">
-              <p className="text-sm font-semibold text-slate-800">{user.name}</p>
+              <p className="text-sm font-semibold text-slate-800">{displayName}</p>
               <p className="text-xs text-indigo-600 capitalize mb-3">Administrator</p>
               <button onClick={onLogout} className="w-full px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl text-sm font-semibold transition-colors">Keluar</button>
             </div>
@@ -124,7 +174,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout, schedul
           <div className="flex-1 md:hidden text-center font-bold text-slate-800">Admin Scoolab</div>
           <div className="hidden md:flex items-center gap-4 ml-auto">
             <div className="text-right">
-              <p className="text-sm font-semibold text-slate-800">{user.name}</p>
+              <p className="text-sm font-semibold text-slate-800">{displayName}</p>
               <p className="text-xs text-indigo-600 capitalize">Administrator</p>
             </div>
             <button onClick={onLogout} className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl text-sm font-semibold transition-colors">Keluar</button>
@@ -134,10 +184,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout, schedul
         <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50">
           {activeMenu === 'dashboard' ? (
             <div className="space-y-6 animate-in fade-in">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-800">Ringkasan Sistem</h2>
-                <p className="text-slate-500 text-sm mt-1">Pantau status sekolah secara keseluruhan.</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-800">Ringkasan Sistem</h2>
+                  <p className="text-slate-500 text-sm mt-1">Pantau status sekolah secara keseluruhan.</p>
+                </div>
+                {metricsLoading && (
+                  <Loader2 className="animate-spin text-indigo-400" size={20} />
+                )}
               </div>
+              {metricsError && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">{metricsError}</p>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {metricCards.map((metric, index) => {
                   const Icon = metric.icon;

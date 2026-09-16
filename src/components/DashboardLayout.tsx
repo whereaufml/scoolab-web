@@ -4,7 +4,13 @@ import ChangePasswordModal from './ChangePasswordModal';
 
 const DashboardLayout = memo(({ user, activeServer, onChangeServer, onLogout, onBack, onChangePassword, children }: any) => {  
   const [showSettings, setShowSettings] = useState(false);
-  
+
+  // Jaga-jaga: saat sesi Supabase Auth masih di-restore (mis. baru refresh halaman),
+  // `user` bisa saja sesaat null/belum lengkap sebelum profil selesai di-fetch.
+  // Tanpa guard ini, `user.name.charAt(0)` di bawah bisa langsung crash-kan halaman.
+  if (!user) return null;
+  const displayName = user.name || 'Pengguna';
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
@@ -24,11 +30,11 @@ const DashboardLayout = memo(({ user, activeServer, onChangeServer, onLogout, on
               </button>
             )}
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold text-slate-800">{user.name}</p>
+              <p className="text-sm font-semibold text-slate-800">{displayName}</p>
               <p className="text-xs text-blue-600 capitalize">{user.role}</p>
             </div>
             <div className="w-10 h-10 bg-blue-100 border border-blue-200 text-blue-700 rounded-full flex items-center justify-center font-bold">
-              {user.name.charAt(0).toUpperCase()}
+              {displayName.charAt(0).toUpperCase()}
             </div>
             <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-blue-600 rounded-xl transition-colors"><Settings size={20} /></button>
             <button onClick={onLogout} className="p-2 text-slate-400 hover:text-red-500 rounded-xl transition-colors"><LogOut size={20} /></button>

@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Calculator, LogOut, Plus, ArrowRight, FolderArchive, Key, Layers, Sigma, X,
-  Calendar, Clock, Pencil, Trash2
+  Calendar, Clock, Pencil, Trash2, Loader2, AlertCircle
 } from 'lucide-react';
 
 // Sesuaikan jalur ini ke tempat file constants.ts kamu berada
 import { generateId } from '../materi/lkpd/constants';
+import { supabase } from '../supabaseClient';
 
 // --- Definisi Tipe Data ---
 export interface ClassData {
@@ -17,36 +18,41 @@ export interface ClassData {
   studentCount: number;
 }
 
-// PERBAIKAN: jadwal sekarang berupa data terstruktur (bukan teks manual di JSX),
-// supaya bisa diisi/diubah sendiri oleh guru lewat modal "Edit Jadwal".
-export interface JadwalItem {
+// Jadwal sekarang diambil & disimpan langsung ke tabel `schedules` di Supabase
+// (kolom: hari, jam_mulai, jam_selesai, mata_pelajaran, guru_id, kelas_id),
+// jadi selalu sinkron dengan yang admin atur lewat ScheduleManagement.
+interface JadwalRow {
   id: string;
-  start: string;   // format "HH:MM", contoh "08:00"
-  end: string;     // format "HH:MM", contoh "09:30"
-  mapel: string;
-  kelas: string;
+  jam_mulai: string;
+  jam_selesai: string;
+  mata_pelajaran: string;
+  kelas_id: string;
+  classes?: { nama_tampilan: string } | null;
+}
+
+// Kelas resmi sekolah (tingkat+rombel) dari tabel `classes`, dipakai untuk dropdown
+// "Kelas" di form jadwal — menggantikan input teks bebas yang rawan salah ketik.
+interface KelasOption {
+  id: string;
+  nama_tampilan: string;
 }
 
 interface TeacherServerLobbyProps {
-  user: { name: string; role: string; id: string };
+  user: { id: string; name: string; role: string };
   classes: ClassData[];
   onSelectServer: (id: string) => void;
   onLogout: () => void;
   onAddClass: (newClass: ClassData) => void;
   onArchiveClass: (id: string) => void;
   onRestoreClass: (id: string) => void;
-  // PERBAIKAN: jadwal & perubahannya sekarang bisa "dititipkan" ke komponen induk
-  // (misalnya supaya tersimpan ke backend/localStorage nanti). Keduanya opsional,
-  // jadi komponen ini tetap jalan mandiri walau induknya belum menyediakan ini.
-  jadwal?: JadwalItem[];
-  onChangeJadwal?: (items: JadwalItem[]) => void;
 }
 
 const MAPEL_OPTIONS = ['Matematika', 'IPA', 'IPS', 'Bahasa Indonesia', 'Agama'];
+const HARI_LIST = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+const getTodayHari = () => HARI_LIST[new Date().getDay()];
 
 const TeacherServerLobby: React.FC<TeacherServerLobbyProps> = ({
-  user, classes, onSelectServer, onLogout, onAddClass, onArchiveClass, onRestoreClass,
-  jadwal: jadwalProp, onChangeJadwal
+  user, classes, onSelectServer, onLogout, onAddClass, onArchiveClass, onRestoreClass
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showArchiveDrawer, setShowArchiveDrawer] = useState(false);
@@ -55,20 +61,61 @@ const TeacherServerLobby: React.FC<TeacherServerLobbyProps> = ({
   const [newYear, setNewYear] = useState('2026/2027');
   const [classFormError, setClassFormError] = useState('');
 
-  // PERBAIKAN: kalau parent belum mengirim prop `jadwal`, komponen ini tetap
-  // punya state sendiri (mulai kosong) sehingga tidak ada teks jadwal hardcode.
-  const [internalJadwal, setInternalJadwal] = useState<JadwalItem[]>([]);
-  const jadwal = jadwalProp ?? internalJadwal;
-  const updateJadwal = (items: JadwalItem[]) => {
-    if (onChangeJadwal) onChangeJadwal(items);
-    else setInternalJadwal(items);
+  const todayHari = getTodayHari();
+
+  // --- JADWAL MENGAJAR HARI INI, LANGSUNG DARI TABEL `schedules` SUPABASE ---
+  const [jadwal, setJadwal] = useState<JadwalRow[]>([]);
+  const [jadwalLoading, setJadwalLoading] = useState(true);
+  const [jadwalListError, setJadwalListError] = useState('');
+  const [kelasOptions, setKelasOptions] = useState<KelasOption[]>([]);
+  const [isMutatingJadwal, setIsMutatingJadwal] = useState(false);
+
+  const fetchJadwalHariIni = async () => {
+    setJadwalLoading(true);
+    setJadwalListError('');
+    try {
+      const { data, error } = await supabase
+        .from('schedules')
+        .select('id, jam_mulai, jam_selesai, mata_pelajaran, kelas_id, classes(nama_tampilan)')
+        .eq('guru_id', user.id)
+        .eq('hari', todayHari)
+        .order('jam_mulai');
+
+      if (error) throw error;
+      setJadwal((data as any) || []);
+    } catch (err) {
+      console.error('Gagal memuat jadwal:', err);
+      setJadwalListError('Gagal memuat jadwal mengajar hari ini.');
+    } finally {
+      setJadwalLoading(false);
+    }
   };
+
+  const fetchKelasOptions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('classes')
+        .select('id, nama_tampilan')
+        .eq('is_archived', false)
+        .order('nama_tampilan');
+      if (error) throw error;
+      setKelasOptions(data || []);
+    } catch (err) {
+      console.error('Gagal memuat daftar kelas:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchJadwalHariIni();
+    fetchKelasOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.id]);
 
   const [showEditJadwalModal, setShowEditJadwalModal] = useState(false);
   const [jadwalStart, setJadwalStart] = useState('');
   const [jadwalEnd, setJadwalEnd] = useState('');
   const [jadwalMapel, setJadwalMapel] = useState('Matematika');
-  const [jadwalKelas, setJadwalKelas] = useState('');
+  const [jadwalKelasId, setJadwalKelasId] = useState('');
   const [jadwalFormError, setJadwalFormError] = useState('');
 
   const activeClasses = classes.filter(c => !c.isArchived);
@@ -97,7 +144,7 @@ const TeacherServerLobby: React.FC<TeacherServerLobbyProps> = ({
     setShowAddModal(false);
   };
 
-  const handleAddJadwalItem = () => {
+  const handleAddJadwalItem = async () => {
     if (!jadwalStart || !jadwalEnd) {
       setJadwalFormError('Jam mulai dan jam selesai wajib diisi.');
       return;
@@ -106,28 +153,49 @@ const TeacherServerLobby: React.FC<TeacherServerLobbyProps> = ({
       setJadwalFormError('Jam selesai harus setelah jam mulai.');
       return;
     }
-    if (!jadwalKelas.trim()) {
-      setJadwalFormError('Kelas belum diisi.');
+    if (!jadwalKelasId) {
+      setJadwalFormError('Pilih kelas terlebih dahulu.');
       return;
     }
-    const newItem: JadwalItem = {
-      id: generateId('jdw'),
-      start: jadwalStart,
-      end: jadwalEnd,
-      mapel: jadwalMapel,
-      kelas: jadwalKelas.trim()
-    };
-    // urutkan berdasarkan jam mulai supaya tampil rapi
-    const updated = [...jadwal, newItem].sort((a, b) => a.start.localeCompare(b.start));
-    updateJadwal(updated);
-    setJadwalStart('');
-    setJadwalEnd('');
-    setJadwalKelas('');
+
+    setIsMutatingJadwal(true);
     setJadwalFormError('');
+    try {
+      const { error } = await supabase.from('schedules').insert([{
+        hari: todayHari,
+        jam_mulai: jadwalStart,
+        jam_selesai: jadwalEnd,
+        mata_pelajaran: jadwalMapel,
+        guru_id: user.id,
+        kelas_id: jadwalKelasId,
+      }]);
+
+      if (error) throw error;
+
+      await fetchJadwalHariIni();
+      setJadwalStart('');
+      setJadwalEnd('');
+      setJadwalKelasId('');
+    } catch (err: any) {
+      console.error('Gagal menyimpan jadwal:', err);
+      setJadwalFormError(err?.message || 'Gagal menyimpan jadwal, coba lagi.');
+    } finally {
+      setIsMutatingJadwal(false);
+    }
   };
 
-  const handleRemoveJadwalItem = (id: string) => {
-    updateJadwal(jadwal.filter(j => j.id !== id));
+  const handleRemoveJadwalItem = async (id: string) => {
+    setIsMutatingJadwal(true);
+    try {
+      const { error } = await supabase.from('schedules').delete().eq('id', id);
+      if (error) throw error;
+      await fetchJadwalHariIni();
+    } catch (err) {
+      console.error('Gagal menghapus jadwal:', err);
+      setJadwalListError('Gagal menghapus salah satu jadwal.');
+    } finally {
+      setIsMutatingJadwal(false);
+    }
   };
 
   return (
@@ -174,18 +242,21 @@ const TeacherServerLobby: React.FC<TeacherServerLobbyProps> = ({
           </div>
           <div className="flex-1 text-white">
             {/* PERBAIKAN: tanggal otomatis dari `todayLabel`, bukan teks manual */}
-            <h3 className="text-lg font-bold mb-3 md:mb-2">Jadwal Mengajar Hari Ini: {todayLabel}</h3>
+            <h3 className="text-lg font-bold mb-3 md:mb-2 flex items-center gap-2">
+              Jadwal Mengajar Hari Ini: {todayLabel}
+              {jadwalLoading && <Loader2 size={16} className="animate-spin text-blue-200" />}
+            </h3>
 
-            {/* PERBAIKAN: jadwal dirender dari data (state/props), bukan ditulis manual.
-                Kalau belum ada jadwal, tampilkan pesan kosong yang mengarahkan ke tombol Edit Jadwal. */}
-            {jadwal.length === 0 ? (
+            {jadwalListError ? (
+              <p className="text-sm text-red-100 font-medium flex items-center gap-1"><AlertCircle size={14} /> {jadwalListError}</p>
+            ) : !jadwalLoading && jadwal.length === 0 ? (
               <p className="text-sm text-blue-100 font-medium">Belum ada jadwal hari ini. Tambahkan lewat tombol "Edit Jadwal".</p>
             ) : (
               <div className="flex flex-col sm:flex-row flex-wrap gap-3 text-sm font-medium">
                 {jadwal.map(item => (
                   <div key={item.id} className="flex items-center gap-2 bg-blue-700/50 px-3 py-2 rounded-xl border border-blue-500/50 backdrop-blur-sm">
                     <Clock size={16} className="text-blue-200 shrink-0" />
-                    <span>{item.start} - {item.end} | {item.mapel} ({item.kelas})</span>
+                    <span>{item.jam_mulai.slice(0, 5)} - {item.jam_selesai.slice(0, 5)} | {item.mata_pelajaran} ({item.classes?.nama_tampilan || '-'})</span>
                   </div>
                 ))}
               </div>
@@ -298,8 +369,8 @@ const TeacherServerLobby: React.FC<TeacherServerLobbyProps> = ({
               ) : (
                 jadwal.map(item => (
                   <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                    <span className="text-sm font-semibold text-slate-700">{item.start} - {item.end} | {item.mapel} ({item.kelas})</span>
-                    <button onClick={() => handleRemoveJadwalItem(item.id)} aria-label={`Hapus jadwal ${item.mapel} ${item.kelas}`} className="text-slate-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                    <span className="text-sm font-semibold text-slate-700">{item.jam_mulai.slice(0, 5)} - {item.jam_selesai.slice(0, 5)} | {item.mata_pelajaran} ({item.classes?.nama_tampilan || '-'})</span>
+                    <button onClick={() => handleRemoveJadwalItem(item.id)} disabled={isMutatingJadwal} aria-label={`Hapus jadwal ${item.mata_pelajaran}`} className="text-slate-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50">
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -313,26 +384,31 @@ const TeacherServerLobby: React.FC<TeacherServerLobbyProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1">Jam Mulai</label>
-                  <input type="time" value={jadwalStart} onChange={e => { setJadwalStart(e.target.value); if (jadwalFormError) setJadwalFormError(''); }} className="w-full border border-slate-200 bg-slate-50 px-3 py-2.5 rounded-xl text-sm font-medium outline-none focus:border-blue-500 focus:bg-white transition-colors" />
+                  <input type="time" value={jadwalStart} onChange={e => { setJadwalStart(e.target.value); if (jadwalFormError) setJadwalFormError(''); }} disabled={isMutatingJadwal} className="w-full border border-slate-200 bg-slate-50 px-3 py-2.5 rounded-xl text-sm font-medium outline-none focus:border-blue-500 focus:bg-white transition-colors disabled:opacity-50" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1">Jam Selesai</label>
-                  <input type="time" value={jadwalEnd} onChange={e => { setJadwalEnd(e.target.value); if (jadwalFormError) setJadwalFormError(''); }} className="w-full border border-slate-200 bg-slate-50 px-3 py-2.5 rounded-xl text-sm font-medium outline-none focus:border-blue-500 focus:bg-white transition-colors" />
+                  <input type="time" value={jadwalEnd} onChange={e => { setJadwalEnd(e.target.value); if (jadwalFormError) setJadwalFormError(''); }} disabled={isMutatingJadwal} className="w-full border border-slate-200 bg-slate-50 px-3 py-2.5 rounded-xl text-sm font-medium outline-none focus:border-blue-500 focus:bg-white transition-colors disabled:opacity-50" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">Mata Pelajaran</label>
-                <select value={jadwalMapel} onChange={e => setJadwalMapel(e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors appearance-none">
+                <select value={jadwalMapel} onChange={e => setJadwalMapel(e.target.value)} disabled={isMutatingJadwal} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors appearance-none disabled:opacity-50">
                   {MAPEL_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">Kelas</label>
-                <input value={jadwalKelas} onChange={e => { setJadwalKelas(e.target.value); if (jadwalFormError) setJadwalFormError(''); }} placeholder="Contoh: 8A" className="w-full border border-slate-200 bg-slate-50 px-3 py-2.5 rounded-xl text-sm font-medium outline-none focus:border-blue-500 focus:bg-white transition-colors" />
+                {/* PERBAIKAN: dulu input teks bebas (rawan salah ketik) -> sekarang dropdown dari data kelas asli */}
+                <select value={jadwalKelasId} onChange={e => { setJadwalKelasId(e.target.value); if (jadwalFormError) setJadwalFormError(''); }} disabled={isMutatingJadwal} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors appearance-none disabled:opacity-50">
+                  <option value="">-- Pilih Kelas --</option>
+                  {kelasOptions.map(k => <option key={k.id} value={k.id}>{k.nama_tampilan}</option>)}
+                </select>
               </div>
               {jadwalFormError && <p className="text-xs font-semibold text-red-500">{jadwalFormError}</p>}
-              <button onClick={handleAddJadwalItem} className="w-full py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
-                <Plus size={16} /> Tambahkan ke Jadwal
+              <button onClick={handleAddJadwalItem} disabled={isMutatingJadwal} className="w-full py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50">
+                {isMutatingJadwal ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                {isMutatingJadwal ? 'Menyimpan...' : 'Tambahkan ke Jadwal'}
               </button>
             </div>
 

@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { Calculator, AlertCircle, LogIn } from 'lucide-react';
+import { Calculator, AlertCircle, LogIn, Loader2 } from 'lucide-react';
+import { supabase } from '../supabaseClient'; // Pastikan path ini sesuai letak file supabaseClient-mu
 
 interface LoginPageProps {
   onLogin: (userData: any) => void;
-  usersDb: any;
+  // usersDb dihapus karena kita login langsung pakai Supabase
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin, usersDb }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -19,30 +21,27 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, usersDb }) => {
       return setError('Username dan sandi wajib diisi.');
     }
 
-    let foundUser = null;
-    let foundRole = null;
-    let foundName = null;
+    setIsLoading(true);
+    try {
+      // Mencari akun di tabel profiles berdasarkan username dan password
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('username', username)
+        .eq('password', password)
+        .single(); // single() karena username unik (hanya ada 1)
 
-    // Sistem mencari identitas di ketiga kelompok data
-    const roles = ['admin', 'guru', 'siswa'];
-    for (const role of roles) {
-      if (usersDb[role] && usersDb[role][username]) {
-        if (usersDb[role][username].pass === password) {
-          foundUser = usersDb[role][username];
-          foundRole = role;
-          foundName = username;
-          break; // Hentikan pencarian jika sudah ditemukan
-        } else {
-          return setError('Kata sandi yang kamu masukkan salah.');
-        }
+      if (error || !data) {
+        throw new Error('Username atau kata sandi salah.');
       }
-    }
 
-    if (foundUser) {
-      // Mengirimkan data user beserta peran yang terdeteksi ke App.tsx
-      onLogin({ ...foundUser, name: foundName, role: foundRole });
-    } else {
-      setError('Username tidak terdaftar di sistem.');
+      // Berhasil login, kirim data ke App.tsx
+      onLogin(data);
+
+    } catch (err: any) {
+      setError(err.message || 'Gagal terhubung ke sistem.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -68,32 +67,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, usersDb }) => {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Username</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all"
-                placeholder="Masukkan username (contoh: admin_utama)"
-              />
+              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600" placeholder="Masukkan username" />
             </div>
 
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Kata Sandi</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all"
-                placeholder="Masukkan kata sandi"
-              />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600" placeholder="Masukkan kata sandi" />
             </div>
 
-            <button
-              type="submit"
-              className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
-            >
-              <LogIn size={18} />
-              Masuk Sekarang
+            <button type="submit" disabled={isLoading} className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm">
+              {isLoading ? <Loader2 className="animate-spin" size={18} /> : <LogIn size={18} />}
+              {isLoading ? 'Memeriksa Data...' : 'Masuk Sekarang'}
             </button>
           </form>
         </div>
@@ -103,4 +87,3 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, usersDb }) => {
 };
 
 export default LoginPage;
-

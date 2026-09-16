@@ -1,9 +1,5 @@
-
 import React, { useState } from 'react';
-import { ArrowLeft, Plus, Trash2, CheckCircle2, Clock, Link as LinkIcon, Image as ImageIcon, Video } from 'lucide-react';
-import { generateId } from '../lkpd/constants';
-
-// Cukup panggil komponennya menggunakan import ini:
+import { ArrowLeft, Plus, Trash2, CheckCircle2, Clock, Link as LinkIcon, Loader2 } from 'lucide-react';import { generateId } from '../lkpd/constants';
 import MathKeyboard from '../../components/MathKeyboard';
 
 interface UjianBuilderProps {
@@ -17,6 +13,7 @@ const UjianBuilder: React.FC<UjianBuilderProps> = ({ ujianItem, onSave, onBack }
   const [title, setTitle] = useState(ujianItem.title);
   const [desc, setDesc] = useState(ujianItem.desc);
   const [duration, setDuration] = useState(ujianItem.duration || 60);
+  const [isSaving, setIsSaving] = useState(false); // Tambahan status loading
 
   const addQuestion = (type: 'multiple_choice' | 'essay') => {
     const newQ: any = { id: generateId('q'), type, content: '', fileUrl: '' };
@@ -30,10 +27,11 @@ const UjianBuilder: React.FC<UjianBuilderProps> = ({ ujianItem, onSave, onBack }
     setQuestions(questions.map(q => q.id === qId ? { ...q, [field]: val } : q));
   };
 
-  const handleSaveAll = () => {
-    onSave({ ...ujianItem, title, desc, duration, questions });
-    alert('Ujian berhasil disimpan!');
-    onBack();
+  const handleSaveAll = async () => {
+    setIsSaving(true);
+    // Fungsi ini sekarang async karena UjianManagement memanggil Supabase
+    await onSave({ ...ujianItem, title, desc, duration, questions });
+    setIsSaving(false);
   };
 
   return (
@@ -43,7 +41,10 @@ const UjianBuilder: React.FC<UjianBuilderProps> = ({ ujianItem, onSave, onBack }
           <button onClick={onBack} className="p-2 text-slate-500 hover:bg-slate-100 rounded-xl border border-slate-200"><ArrowLeft size={18}/></button>
           <h2 className="text-xl font-bold text-slate-800">Editor Ujian</h2>
         </div>
-        <button onClick={handleSaveAll} className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl">Simpan Ujian</button>
+        <button onClick={handleSaveAll} disabled={isSaving} className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl flex justify-center items-center">
+          {isSaving ? <Loader2 className="animate-spin mr-2" size={18} /> : null}
+          {isSaving ? 'Menyimpan...' : 'Simpan Ujian'}
+        </button>
       </div>
 
       <div className="bg-white p-4 sm:p-6 rounded-3xl border border-slate-200 shadow-sm mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -72,18 +73,10 @@ const UjianBuilder: React.FC<UjianBuilderProps> = ({ ujianItem, onSave, onBack }
               <button onClick={() => setQuestions(questions.filter(item => item.id !== q.id))} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
             </div>
 
-            {/* Menampilkan Keyboard Matematika */}
-            <MathKeyboard 
-              onInsert={(sym) => updateQuestion(q.id, 'content', (q.content || '') + sym)} 
-            />
-
+            <MathKeyboard onInsert={(sym) => updateQuestion(q.id, 'content', (q.content || '') + sym)} />
             <textarea placeholder="Tuliskan pertanyaan di sini..." value={q.content} onChange={e => updateQuestion(q.id, 'content', e.target.value)} className="w-full p-3 border border-slate-200 bg-slate-50 rounded-xl text-sm outline-none mb-2 focus:border-indigo-500" rows={3} />
             
             <div className="flex items-center gap-2 mb-3">
-              <div className="flex bg-slate-100 p-1 rounded-lg">
-                <button title="Gambar" className="p-1.5 text-slate-500 hover:text-indigo-600 rounded-md"><ImageIcon size={16}/></button>
-                <button title="Video" className="p-1.5 text-slate-500 hover:text-red-500 rounded-md"><Video size={16}/></button>
-              </div>
               <div className="relative flex-1">
                 <LinkIcon className="absolute left-3 top-2.5 text-slate-400" size={14} />
                 <input type="text" placeholder="URL Lampiran Media (Opsional)..." value={q.fileUrl || ''} onChange={e => updateQuestion(q.id, 'fileUrl', e.target.value)} className="w-full pl-8 p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs outline-none focus:border-indigo-500" />
@@ -106,8 +99,8 @@ const UjianBuilder: React.FC<UjianBuilderProps> = ({ ujianItem, onSave, onBack }
       </div>
 
       <div className="flex justify-center gap-3 mt-6">
-        <button onClick={() => addQuestion('multiple_choice')} className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl text-xs font-semibold transition-colors"><Plus size={14} className="inline mr-1"/> Pilihan Ganda</button>
-        <button onClick={() => addQuestion('essay')} className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl text-xs font-semibold transition-colors"><Plus size={14} className="inline mr-1"/> Uraian</button>
+        <button onClick={() => addQuestion('multiple_choice')} className="px-4 py-2.5 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-semibold"><Plus size={14} className="inline mr-1"/> Pilihan Ganda</button>
+        <button onClick={() => addQuestion('essay')} className="px-4 py-2.5 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-semibold"><Plus size={14} className="inline mr-1"/> Uraian</button>
       </div>
     </div>
   );
